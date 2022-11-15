@@ -1,0 +1,2443 @@
+---- D:\project\K213A\program\main.c ----------------------------------------------------------------------
+1:                #include "app_global.h"
+2:                #include "types_base.h"
+3:                #include "timer_port.h"
+4:                #include "gpio_board.h"
+5:                #include "pwm_board.h"
+6:                #include "adc_board.h"
+7:                #include "watch_dog_port.h"
+8:                #include "display_define.h"
+9:                #include "envent_define.h"
+10:               #include "app_timer.h"
+11:               
+12:               // app_flag_type app_flag_= 0;//{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+13:               bit app_flag_sleep; //睡眠
+14:               bit app_flag_sys_ready; //系统准备完毕
+15:               bit app_flag_work; //工作
+16:               bit app_flag_error; //系统错误
+17:               bit app_flag_sleep_updata; //用于标记在唤醒后一段时间内, 进行一定的唤醒处理
+18:               bit app_flag_nc1;
+19:               bit app_flag_usb_insert; //充电线插入
+20:               bit app_flag_charge_full; //充满电
+21:               bit app_flag_ntc_error; //ntc AD错误
+22:               bit app_flag_current_error; //电流AD错误
+23:               bit app_flag_battery_error; //电池AD错误
+24:               bit app_flag_temp_unit_C; //系统温度单位
+25:               bit app_flag_disp_battery_level; //显示电池电量
+26:               bit app_flag_nc2;
+27:               bit app_flag_nc3;
+28:               bit app_flag_nc4;
+29:               uint8_t app_mode = MODE_A;
+30:               uint8_t app_battery_level = BATTERY_FULL;
+31:               
+32:               /*****************************
+33:                * 电机控制输出
+34:                * ********************************/
+35:               static void motor_function(void)
+36:               {
+37:               	if (app_flag_work)
+  044B    1F70    SNZB	0x70,6
+  044C    2C51    JP	0x451
+38:               	{
+39:               		PWM_ULTRASOUND_SET_DUTY(PWM_DUTY_50);
+  044D    3046    LDIA	0x46
+  044E    00F4    LD	0x74,A
+  044F    01F5    CLR	0x75
+  0450    2B8B    JP	0x38B
+40:               	}
+41:               	else
+42:               	{
+43:               		PWM_ULTRASOUND_SET_DUTY(PWM_DUTY_0);
+  0451    01F4    CLR	0x74
+  0452    01F5    CLR	0x75
+  0453    2B8B    JP	0x38B
+44:               	}
+45:               }
+46:               
+47:               /**************
+48:                * 电池电量处理
+49:                * *****************/
+50:               
+51:               static void battery_deal(void)
+52:               {	
+53:               	static uint16_t __temp1 = 1000, __temp2 = 1000;
+54:               	static uint8_t __cnt = 0;
+55:               
+56:               	//电池AD = 1.2*4096/VDD
+57:               	if (app_flag_sys_ready == 0)// || app_flag_sleep_updata)
+  0029    1BF0    SZB	0x70,7
+  002A    285C    JP	0x5C
+58:               	{
+59:               		if (ADC_BATTERY_VALUE() <= 702) //7V voltage over high
+  002B    3002    LDIA	0x2
+  002C    1283    CLRB	0x3,5
+  002D    1303    CLRB	0x3,6
+60:               		{
+61:               			app_battery_level = BATTERY_HIGH;
+  002E    20EF    CALL	0xEF
+  002F    1803    SZB	0x3,0
+  0030    2833    JP	0x33
+  0031    00FB    LD	0x7B,A
+62:               		}
+  0032    0008    RET
+63:               		else if (ADC_BATTERY_VALUE() <= 1293) // 3.8V
+  0033    0241    SUBA	0x41
+  0034    300E    LDIA	0xE
+  0035    1903    SZB	0x3,2
+  0036    0240    SUBA	0x40
+  0037    1803    SZB	0x3,0
+  0038    283C    JP	0x3C
+64:               		{
+65:               			app_battery_level = BATTERY_FULL;
+  0039    3004    LDIA	0x4
+  003A    00FB    LD	0x7B,A
+66:               		}
+  003B    0008    RET
+67:               		else if (ADC_BATTERY_VALUE() <= 1404) // 3.5V
+  003C    3005    LDIA	0x5
+  003D    0241    SUBA	0x41
+  003E    307D    LDIA	0x7D
+  003F    1903    SZB	0x3,2
+  0040    0240    SUBA	0x40
+  0041    1803    SZB	0x3,0
+  0042    2846    JP	0x46
+68:               		{
+69:               			app_battery_level = BATTERY_LV2;
+  0043    3003    LDIA	0x3
+  0044    00FB    LD	0x7B,A
+70:               		}
+  0045    0008    RET
+71:               		else if (ADC_BATTERY_VALUE() <= 1586) // 3.1V
+  0046    3006    LDIA	0x6
+  0047    0241    SUBA	0x41
+  0048    3033    LDIA	0x33
+  0049    1903    SZB	0x3,2
+  004A    0240    SUBA	0x40
+  004B    1803    SZB	0x3,0
+  004C    2850    JP	0x50
+72:               		{
+73:               			app_battery_level = BATTERY_LV1;
+  004D    3002    LDIA	0x2
+  004E    00FB    LD	0x7B,A
+74:               		}
+  004F    0008    RET
+75:               		else if (ADC_BATTERY_VALUE() <= 1638) // 3.0V
+  0050    3006    LDIA	0x6
+  0051    0241    SUBA	0x41
+  0052    3067    LDIA	0x67
+  0053    1903    SZB	0x3,2
+  0054    0240    SUBA	0x40
+  0055    1803    SZB	0x3,0
+  0056    285A    JP	0x5A
+76:               		{
+77:               			app_battery_level = BATTERY_LV0;
+  0057    01FB    CLR	0x7B
+  0058    0AFB    INCR	0x7B
+78:               		}
+  0059    0008    RET
+79:               		else // 2.75V
+80:               		{
+81:               			app_battery_level = BATTERY_LOSE;
+  005A    01FB    CLR	0x7B
+  005B    0008    RET
+82:               		}
+83:               		return;
+84:               	}
+85:               
+86:               	//如果变化较大则进行多次确认
+87:               	if (ADC_BATTERY_VALUE() >= __temp1 || ADC_BATTERY_VALUE() <= __temp2)
+  005C    1283    CLRB	0x3,5
+  005D    1303    CLRB	0x3,6
+  005E    083F    LD	A,0x3F
+  005F    0241    SUBA	0x41
+  0060    1D03    SNZB	0x3,2
+  0061    2864    JP	0x64
+  0062    083E    LD	A,0x3E
+  0063    0240    SUBA	0x40
+  0064    1803    SZB	0x3,0
+  0065    286E    JP	0x6E
+  0066    0841    LD	A,0x41
+  0067    023D    SUBA	0x3D
+  0068    1D03    SNZB	0x3,2
+  0069    286C    JP	0x6C
+  006A    0840    LD	A,0x40
+  006B    023C    SUBA	0x3C
+  006C    1C03    SNZB	0x3,0
+  006D    2871    JP	0x71
+88:               	{
+89:               		__temp1 = ADC_BATTERY_VALUE() + 32;
+90:               		if (ADC_BATTERY_VALUE() >= 32)
+91:               			__temp2 = ADC_BATTERY_VALUE() - 32;
+92:               		else
+93:               			__temp2 = 0;
+  006E    20D5    CALL	0xD5
+94:               
+95:               		__cnt = 0;
+  006F    01B8    CLR	0x38
+  0070    0008    RET
+96:               		return;
+97:               	}
+98:               	else
+99:               	{
+100:              		//变化幅度大时重新确认, 变化幅度小时不重新确认
+101:              		__temp1 = ADC_BATTERY_VALUE() + 32;
+102:              		if (ADC_BATTERY_VALUE() >= 32)
+103:              			__temp2 = ADC_BATTERY_VALUE() - 32;
+104:              		else
+105:              			__temp2 = 0;
+  0071    20D5    CALL	0xD5
+106:              
+107:              		if (__cnt < 9)
+  0072    3009    LDIA	0x9
+  0073    0238    SUBA	0x38
+  0074    1803    SZB	0x3,0
+  0075    2878    JP	0x78
+108:              		{
+109:              			__cnt++;
+  0076    0AB8    INCR	0x38
+  0077    0008    RET
+110:              			return;
+111:              		}
+112:              	}
+113:              
+114:              	if(app_flag_usb_insert)
+  0078    1E70    SNZB	0x70,4
+  0079    28A6    JP	0xA6
+115:              	{
+116:              		//单向往上走
+117:              		if (ADC_BATTERY_VALUE() <= 702) //7V voltage over high
+  007A    3002    LDIA	0x2
+118:              		{
+119:              			app_battery_level = BATTERY_HIGH;
+120:              		}
+121:              		else if (ADC_BATTERY_VALUE() <= 1293) // 3.8V
+  007B    20EF    CALL	0xEF
+  007C    1C03    SNZB	0x3,0
+  007D    2831    JP	0x31
+  007E    0241    SUBA	0x41
+  007F    300E    LDIA	0xE
+  0080    1903    SZB	0x3,2
+  0081    0240    SUBA	0x40
+  0082    1C03    SNZB	0x3,0
+  0083    2839    JP	0x39
+122:              		{
+123:              			app_battery_level = BATTERY_FULL;
+124:              		}
+125:              		else if (ADC_BATTERY_VALUE() <= 1404 && app_battery_level <= BATTERY_LV2) // 3.5V
+  0084    3005    LDIA	0x5
+  0085    0241    SUBA	0x41
+  0086    307D    LDIA	0x7D
+  0087    1903    SZB	0x3,2
+  0088    0240    SUBA	0x40
+  0089    1803    SZB	0x3,0
+  008A    288F    JP	0x8F
+  008B    3004    LDIA	0x4
+  008C    027B    SUBA	0x7B
+  008D    1C03    SNZB	0x3,0
+  008E    2843    JP	0x43
+126:              		{
+127:              			app_battery_level = BATTERY_LV2;
+128:              		}
+129:              		else if (ADC_BATTERY_VALUE() <= 1586 && app_battery_level <= BATTERY_LV1) // 3.1V
+  008F    3006    LDIA	0x6
+  0090    0241    SUBA	0x41
+  0091    3033    LDIA	0x33
+  0092    1903    SZB	0x3,2
+  0093    0240    SUBA	0x40
+  0094    1803    SZB	0x3,0
+  0095    289A    JP	0x9A
+  0096    3003    LDIA	0x3
+  0097    027B    SUBA	0x7B
+  0098    1C03    SNZB	0x3,0
+  0099    284D    JP	0x4D
+130:              		{
+131:              			app_battery_level = BATTERY_LV1;
+132:              		}
+133:              		else if (ADC_BATTERY_VALUE() <= 1638 && app_battery_level <= BATTERY_LV0) // 3.0V
+  009A    3006    LDIA	0x6
+  009B    0241    SUBA	0x41
+  009C    3067    LDIA	0x67
+  009D    1903    SZB	0x3,2
+  009E    0240    SUBA	0x40
+  009F    1803    SZB	0x3,0
+  00A0    0008    RET
+  00A1    3002    LDIA	0x2
+  00A2    027B    SUBA	0x7B
+  00A3    1803    SZB	0x3,0
+  00A4    0008    RET
+  00A5    2857    JP	0x57
+134:              		{
+135:              			app_battery_level = BATTERY_LV0;
+136:              		}
+137:              	}
+138:              	else
+139:              	{
+140:              		//单向往下走
+141:              		if (ADC_BATTERY_VALUE() <= 702) //7V voltage over high
+  00A6    3002    LDIA	0x2
+142:              		{
+143:              			app_battery_level = BATTERY_HIGH;
+144:              		}
+145:              		else if (ADC_BATTERY_VALUE() <= 1293 && app_battery_level >= BATTERY_FULL) // 3.8V
+  00A7    20EF    CALL	0xEF
+  00A8    1C03    SNZB	0x3,0
+  00A9    2831    JP	0x31
+  00AA    0241    SUBA	0x41
+  00AB    300E    LDIA	0xE
+  00AC    1903    SZB	0x3,2
+  00AD    0240    SUBA	0x40
+  00AE    1803    SZB	0x3,0
+  00AF    28B4    JP	0xB4
+  00B0    3004    LDIA	0x4
+  00B1    027B    SUBA	0x7B
+  00B2    1803    SZB	0x3,0
+  00B3    2839    JP	0x39
+146:              		{
+147:              			app_battery_level = BATTERY_FULL;
+148:              		}
+149:              		else if (ADC_BATTERY_VALUE() <= 1404 && app_battery_level >= BATTERY_LV2) // 3.5V
+  00B4    3005    LDIA	0x5
+  00B5    0241    SUBA	0x41
+  00B6    307D    LDIA	0x7D
+  00B7    1903    SZB	0x3,2
+  00B8    0240    SUBA	0x40
+  00B9    1803    SZB	0x3,0
+  00BA    28BF    JP	0xBF
+  00BB    3003    LDIA	0x3
+  00BC    027B    SUBA	0x7B
+  00BD    1803    SZB	0x3,0
+  00BE    2843    JP	0x43
+150:              		{
+151:              			app_battery_level = BATTERY_LV2;
+152:              		}
+153:              		else if (ADC_BATTERY_VALUE() <= 1586 && app_battery_level >= BATTERY_LV1) // 3.1V
+  00BF    3006    LDIA	0x6
+  00C0    0241    SUBA	0x41
+  00C1    3033    LDIA	0x33
+  00C2    1903    SZB	0x3,2
+  00C3    0240    SUBA	0x40
+  00C4    1803    SZB	0x3,0
+  00C5    28CA    JP	0xCA
+  00C6    3002    LDIA	0x2
+  00C7    027B    SUBA	0x7B
+  00C8    1803    SZB	0x3,0
+  00C9    284D    JP	0x4D
+154:              		{
+155:              			app_battery_level = BATTERY_LV1;
+156:              		}
+157:              		else if (ADC_BATTERY_VALUE() <= 1638 && app_battery_level >= BATTERY_LV0) // 3.0V
+  00CA    3006    LDIA	0x6
+  00CB    0241    SUBA	0x41
+  00CC    3067    LDIA	0x67
+  00CD    1903    SZB	0x3,2
+  00CE    0240    SUBA	0x40
+  00CF    1803    SZB	0x3,0
+  00D0    285A    JP	0x5A
+  00D1    087B    LD	A,0x7B
+  00D2    1D03    SNZB	0x3,2
+  00D3    2857    JP	0x57
+  00D4    285A    JP	0x5A
+158:              		{
+159:              			app_battery_level = BATTERY_LV0;
+160:              		}
+161:              		else // 2.9V
+162:              		{
+163:              			app_battery_level = BATTERY_LOSE;
+164:              		}
+165:              	}
+166:              }
+167:              
+168:              /*****************************
+169:               * 睡眠处理
+170:              ***************************/
+171:              static void sleep(void)
+172:              {
+173:              	uint16_t check_count = 0;
+174:              	
+175:              	if(app_flag_sleep)
+  031C    1C71    SNZB	0x71,0
+  031D    0008    RET
+176:              	{
+177:              		Led_Display_exit();
+  031E    2442    CALL	0x442
+178:              		MM_adc1_suspend();
+  031F    2465    CALL	0x465
+179:              		PWM_SUSPEND();
+  0320    2461    CALL	0x461
+180:              		main_IO_exit();
+  0321    2474    CALL	0x474
+181:              
+182:              		while (app_flag_sleep)
+  0322    1C71    SNZB	0x71,0
+  0323    2B42    JP	0x342
+183:              		{
+184:              			MTF_sys_stop(); //进入休眠模式
+  0324    1283    CLRB	0x3,5
+  0325    1303    CLRB	0x3,6
+  0326    0805    LD	A,0x5
+  0327    0000    NOP
+  0328    0000    NOP
+  0329    0063    STOP
+  032A    0000    NOP
+  032B    0000    NOP
+185:              			check_count = 0;
+  032C    01F8    CLR	0x78
+  032D    01F9    CLR	0x79
+186:              			while (check_count < 300)
+  032E    3001    LDIA	0x1
+  032F    0279    SUBA	0x79
+  0330    302C    LDIA	0x2C
+  0331    1903    SZB	0x3,2
+  0332    0278    SUBA	0x78
+  0333    1803    SZB	0x3,0
+  0334    2B22    JP	0x322
+  0335    0064    CLRWDT
+187:              			{
+188:              				MTF_watch_dog_feed();
+189:              				app_flag_sleep_updata = 1;
+  0336    16F0    SETB	0x70,5
+190:              				if (app_timer_flag_10ms)
+  0337    1DF1    SNZB	0x71,3
+  0338    2B3F    JP	0x33F
+191:              				{
+192:              					app_timer_flag_10ms = 0;
+  0339    11F1    CLRB	0x71,3
+193:              					event_produce();
+  033A    23E9    CALL	0x3E9
+194:              					event_handle();
+  033B    20F4    CALL	0xF4
+195:              					check_count++;
+  033C    0AF8    INCR	0x78
+  033D    1903    SZB	0x3,2
+  033E    0AF9    INCR	0x79
+196:              				}
+197:              				if (app_flag_sleep == 0)
+  033F    1C71    SNZB	0x71,0
+  0340    2B22    JP	0x322
+  0341    2B2E    JP	0x32E
+198:              					break;
+199:              			}
+200:              		}
+201:              		
+202:              		main_IO_init();
+  0342    22C3    CALL	0x2C3
+203:              		PWM_START();
+  0343    2468    CALL	0x468
+204:              		MM_adc1_start();
+  0344    246B    CALL	0x46B
+205:              		Led_Display_init();
+  0345    2C5C    JP	0x45C
+206:              	}
+207:              }
+208:              
+209:              /*****************************
+210:               * 应用初始化
+211:               * **************************/
+212:              static void app_init(void)
+213:              {
+214:              	//PADAUK bit type don not support init that global value
+215:              	app_flag_sleep = 0; //睡眠
+  0428    1071    CLRB	0x71,0
+216:              	app_flag_sys_ready = 0; //系统准备完毕
+  0429    13F0    CLRB	0x70,7
+217:              	app_flag_work = 0; //工作
+218:              	app_flag_error = 0; //系统错误
+  042A    1370    CLRB	0x70,6
+219:              	app_flag_sleep_updata = 0; //用于标记在唤醒后一段时间内, 进行一定的唤醒处理
+220:              	app_flag_nc1 = 0;
+  042B    12F0    CLRB	0x70,5
+221:              	app_flag_usb_insert = 0; //充电线插入
+  042C    1270    CLRB	0x70,4
+222:              	app_flag_charge_full = 0; //充满电
+223:              	app_flag_ntc_error = 0; //ntc AD错误
+  042D    11F0    CLRB	0x70,3
+224:              	app_flag_current_error = 0; //电流AD错误
+225:              	app_flag_battery_error = 0; //电池AD错误
+  042E    1170    CLRB	0x70,2
+226:              	app_flag_temp_unit_C = 0; //系统温度单位
+  042F    10F0    CLRB	0x70,1
+227:              	app_flag_disp_battery_level = 0; //显示电池电量
+228:              	app_flag_nc2 = 0;
+229:              	app_flag_nc3 = 0;
+230:              	app_flag_nc4 = 0;	
+231:              	app_timer_flag_200us = 0;
+  0430    1070    CLRB	0x70,0
+232:              	app_timer_flag_2ms = 0;
+  0431    1171    CLRB	0x71,2
+233:              	app_timer_flag_10ms = 0;
+  0432    11F1    CLRB	0x71,3
+234:              	app_timer_flag_100ms = 0;
+  0433    10F1    CLRB	0x71,1
+  0434    0008    RET
+235:              }
+236:              
+237:              #include "simulate_uart.h"
+238:              void main(void)
+239:              {	
+240:                  uint8_t sys_read_delay = 0, sleep_updata_delay = 0; 
+  0289    01C4    CLR	0x44
+241:              	
+242:              	uint16_t tempADC = 0;
+243:              	uint8_t ccc = 0, itoc = 0;
+  028A    01C5    CLR	0x45
+244:              	
+245:              	main_IO_init();
+  028B    22C3    CALL	0x2C3
+246:              	PWM_INIT();
+  028C    2435    CALL	0x435
+247:              	MM_adc1_init();
+  028D    240B    CALL	0x40B
+248:              	MTF_timer_init_handle();
+  028E    23FC    CALL	0x3FC
+249:              	Led_Display_init();
+  028F    245C    CALL	0x45C
+  0290    0064    CLRWDT
+  0291    3001    LDIA	0x1
+  0292    1683    SETB	0x3,5
+  0293    1303    CLRB	0x3,6
+  0294    0089    LD	0x9,A
+250:              
+251:                  MTF_watch_dog_init();
+252:              
+253:              	app_init();
+  0295    2428    CALL	0x428
+254:              
+255:              	while (1)
+  0296    0064    CLRWDT
+256:              	{
+257:              		MTF_watch_dog_feed();
+258:              
+259:              		if (app_timer_flag_2ms)
+  0297    1D71    SNZB	0x71,2
+  0298    2A9B    JP	0x29B
+260:              		{
+261:              			app_timer_flag_2ms = 0;
+  0299    1171    CLRB	0x71,2
+262:              			adc_run();
+  029A    21F0    CALL	0x1F0
+263:              		}
+264:              
+265:              		if (app_timer_flag_10ms)
+  029B    1DF1    SNZB	0x71,3
+  029C    2AA5    JP	0x2A5
+266:              		{
+267:              			app_timer_flag_10ms = 0;
+  029D    11F1    CLRB	0x71,3
+268:              			// temp_deal();
+269:              			battery_deal();
+  029E    2029    CALL	0x29
+270:              			// motor_current_deal();
+271:              			if (app_flag_sleep_updata == 0)
+  029F    1AF0    SZB	0x70,5
+  02A0    2AA5    JP	0x2A5
+272:              			{
+273:              				event_produce();
+  02A1    23E9    CALL	0x3E9
+274:              				event_handle();
+  02A2    20F4    CALL	0xF4
+275:              				motor_function();
+  02A3    244B    CALL	0x44B
+276:              				Led_display();
+  02A4    2476    CALL	0x476
+277:              			}
+278:              		}
+279:              
+280:              		if (app_timer_flag_100ms)
+  02A5    1CF1    SNZB	0x71,1
+  02A6    2AC1    JP	0x2C1
+281:              		{
+282:              			app_timer_flag_100ms = 0;
+  02A7    10F1    CLRB	0x71,1
+283:              
+284:              			if(app_flag_sys_ready==0)
+  02A8    1BF0    SZB	0x70,7
+  02A9    2AB6    JP	0x2B6
+  02AA    300A    LDIA	0xA
+285:              			{
+286:                              sys_read_delay++;
+  02AB    1283    CLRB	0x3,5
+  02AC    1303    CLRB	0x3,6
+  02AD    0AC4    INCR	0x44
+287:              				if(sys_read_delay>=10) //上电等待系统稳定
+  02AE    0244    SUBA	0x44
+  02AF    1C03    SNZB	0x3,0
+  02B0    2AB6    JP	0x2B6
+288:              				{
+289:              					sys_read_delay = 0;
+  02B1    01C4    CLR	0x44
+290:              					app_flag_sys_ready = 1;
+  02B2    17F0    SETB	0x70,7
+291:              					app_flag_disp_battery_level = 1;
+  02B3    1470    SETB	0x70,0
+292:              					app_flag_sleep = 0;
+  02B4    1071    CLRB	0x71,0
+293:              					app_flag_work = 1;
+  02B5    1770    SETB	0x70,6
+294:              				}
+295:              			}
+296:              
+297:              			if (app_flag_sleep_updata)
+  02B6    1EF0    SNZB	0x70,5
+  02B7    2AC1    JP	0x2C1
+  02B8    3002    LDIA	0x2
+298:              			{
+299:              				sleep_updata_delay++;
+  02B9    1283    CLRB	0x3,5
+  02BA    1303    CLRB	0x3,6
+  02BB    0AC5    INCR	0x45
+300:              				if (sleep_updata_delay >= 2)
+  02BC    0245    SUBA	0x45
+  02BD    1C03    SNZB	0x3,0
+  02BE    2AC1    JP	0x2C1
+301:              				{
+302:              					sleep_updata_delay = 0;
+  02BF    01C5    CLR	0x45
+303:              					app_flag_sleep_updata = 0;
+  02C0    12F0    CLRB	0x70,5
+304:              				}
+305:              			}
+306:              		}
+307:              
+308:              #if 0
+309:              		if(simulate_uart_send_cnt()==0) //uart打印调试
+310:              		{
+311:              			if(ccc==0)
+312:              			{
+313:              				simulate_uart_send_buffer('A');
+314:              			}
+315:              			else if(ccc==1)
+316:              			{
+317:              				simulate_uart_send_buffer('D');
+318:              			}
+319:              			else if(ccc==2)
+320:              			{
+321:              				simulate_uart_send_buffer(':');
+322:              			}
+323:              			else if(ccc==3)
+324:              			{
+325:              				itoc = ((tempADC&0XF000)>>12);
+326:              				if(itoc>=10)
+327:              					itoc = itoc-10+'A';
+328:              				else
+329:              					itoc = itoc+'0';
+330:              				simulate_uart_send_buffer(itoc);
+331:              			}
+332:              			else if(ccc==4)
+333:              			{
+334:              				itoc = ((tempADC&0X0F00)>>8);
+335:              				if(itoc>=10)
+336:              					itoc = itoc-10+'A';
+337:              				else
+338:              					itoc = itoc+'0';
+339:              				simulate_uart_send_buffer(itoc);
+340:              			}
+341:              			else if(ccc==5)
+342:              			{
+343:              				itoc = ((tempADC&0X00F0)>>4);
+344:              				if(itoc>=10)
+345:              					itoc = itoc-10+'A';
+346:              				else
+347:              					itoc = itoc+'0';
+348:              				simulate_uart_send_buffer(itoc);
+349:              			}
+350:              			else if(ccc==6)
+351:              			{
+352:              				itoc = tempADC&0X000F;
+353:              				if(itoc>=10)
+354:              					itoc = itoc-10+'A';
+355:              				else
+356:              					itoc = itoc+'0';
+357:              				simulate_uart_send_buffer(itoc);
+358:              			}
+359:              			else if(ccc==7)
+360:              			{
+361:              				simulate_uart_send_buffer(10);
+362:              			}
+363:              
+364:              			ccc++;
+365:              			if(ccc>7)
+366:              			{
+367:              				ccc = 0;
+368:              				tempADC = ADC_BATTERY_VALUE();
+369:              			}
+370:              		}
+371:              #endif
+372:              		
+373:              		sleep();
+  02C1    231C    CALL	0x31C
+  02C2    2A96    JP	0x296
+374:              
+375:                      //外设和程序测试
+376:              #if 0
+377:                      $ PB.4 TOGGLE;
+378:                      .delay 8000;
+379:                      gpio_test();
+380:                      
+381:                      //电池AD = 1.2*4096/VDD
+382:                      if (ADC_BATTERY_VALUE() >= 1328 - 10 && ADC_BATTERY_VALUE() <= 1328 + 10)
+383:                          PWM_MOTOR_START();
+384:                      else
+385:                          PWM_MOTOR_SUSPEND();
+386:              #endif
+387:                  }
+388:              }
+---- D:\project\K213A\program\gpio_board.c ----------------------------------------------------------------------
+1:                #include "gpio_board.h"
+2:                
+3:                void main_IO_init(void)
+4:                {
+5:                	//此IC只有端口A有电平变化中断
+6:                
+7:                	// RA0: LED1-W OUTPUT
+8:                	// RA1: KEY-1 INPUT
+9:                	// RA2: LED1-R OUTPUT
+10:               	// RA3: 5V-EN OUTPUT
+11:               	// RA4: BAT-AD INPUT
+12:               	// RA5: INPUT INPUT
+13:               	// RA6: CHRG INPUT
+14:               	PORTA = 0B00001101;	 // A端口数据寄存器
+  02C3    300D    LDIA	0xD
+  02C4    1283    CLRB	0x3,5
+  02C5    1303    CLRB	0x3,6
+  02C6    0085    LD	0x5,A
+15:               	ANSEL0 = 0B00010000; // A端口模拟功能寄存器, 默认0, 1设置为模拟功能, 0关闭
+  02C7    3010    LDIA	0x10
+  02C8    1703    SETB	0x3,6
+  02C9    0090    LD	0x10,A
+16:               	TRISA = 0B01110010;	 //端口A方向寄存器, 默认1, 1高阻输入, 0推挽输出
+  02CA    3072    LDIA	0x72
+  02CB    1683    SETB	0x3,5
+  02CC    1303    CLRB	0x3,6
+  02CD    0085    LD	0x5,A
+17:               	WPUA = 0B01000010;	 //端口A输入上拉(输出时自动关闭), 默认0, 1开启, 0关闭
+  02CE    3042    LDIA	0x42
+  02CF    1283    CLRB	0x3,5
+  02D0    0087    LD	0x7,A
+18:               	WPDA = 0;			 //端口A输入下拉(输出时自动关闭), 默认0, 1开启, 0关闭
+  02D1    1683    SETB	0x3,5
+  02D2    0197    CLR	0x17
+19:               
+20:               	IOCA = 0B00100010; //端口A电平变化中断, 默认0, 1开启, 0关闭
+  02D3    3022    LDIA	0x22
+  02D4    0095    LD	0x15,A
+21:               	PIE2 |= 0X02;	   //使能PORTA电平变化中断
+  02D5    1283    CLRB	0x3,5
+  02D6    1703    SETB	0x3,6
+  02D7    1488    SETB	0x8,1
+22:               	PORTA;			   //读取PORTA并锁存
+  02D8    1303    CLRB	0x3,6
+  02D9    0805    LD	A,0x5
+23:               
+24:               	// RB0: WH-AD INPUT
+25:               	// RB1: WH-PWM OUTPUT
+26:               	// RB2: LED2-W OUTPUT
+27:               	// RB3: LED2-R OUTPUT
+28:               	// RB4: LIGHT OUTPUT
+29:               	PORTB = 0B00001100; // B端口数据寄存器
+  02DA    300C    LDIA	0xC
+  02DB    0086    LD	0x6,A
+30:               	ANSEL1 = 0;			// B端口模拟功能寄存器, 默认0, 1设置为模拟功能, 0关闭, B端口注意规格书位顺序描述有误?
+  02DC    1703    SETB	0x3,6
+  02DD    0191    CLR	0x11
+31:               	TRISB = 0B00000001; //端口B方向寄存器, 默认1, 1高阻输入, 0推挽输出
+  02DE    3001    LDIA	0x1
+  02DF    1683    SETB	0x3,5
+  02E0    1303    CLRB	0x3,6
+  02E1    0086    LD	0x6,A
+32:               	WPUB = 0;			//端口B输入上拉(输出时自动关闭), 默认0, 1开启, 0关闭
+  02E2    1283    CLRB	0x3,5
+  02E3    0188    CLR	0x8
+33:               	WPDB = 0;			//端口B输入下拉(输出时自动关闭), 默认0, 1开启, 0关闭
+  02E4    1683    SETB	0x3,5
+  02E5    0187    CLR	0x7
+34:               
+35:               	// RC0: TX-DAT OUTPUT
+36:               	// RC1: RX-CLK OUTPUT
+37:               	PORTC = 0;			// C端口数据寄存器
+  02E6    0192    CLR	0x12
+38:               	ANSEL2 = 0;			// C端口模拟功能寄存器, 默认0, 1设置为模拟功能, 0关闭, C端口注意规格书位顺序描述有误?
+  02E7    1283    CLRB	0x3,5
+  02E8    1703    SETB	0x3,6
+  02E9    0192    CLR	0x12
+39:               	TRISC = 0; //端口C方向寄存器, 默认1, 1高阻输入, 0推挽输出
+  02EA    1683    SETB	0x3,5
+  02EB    1303    CLRB	0x3,6
+  02EC    0193    CLR	0x13
+40:               	WPUC = 0;			//端口C输入上拉(输出时自动关闭), 默认0, 1开启, 0关闭
+  02ED    0199    CLR	0x19
+41:               	WPDC = 0;			//端口C输入下拉(输出时自动关闭), 默认0, 1开启, 0关闭
+  02EE    0198    CLR	0x18
+  02EF    0008    RET
+42:               }
+43:               
+44:               //睡眠前设置gpio
+45:               void main_IO_exit(void)
+46:               {
+47:               	EN_5V_PIN(0);
+  0474    1005    CLRB	0x5,0
+  0475    0008    RET
+48:               }
+---- D:\project\K213A\program\envent_define.c ----------------------------------------------------------------------
+1:                #include "envent_define.h"
+2:                #include "key_board.h"
+3:                #include "app_global.h"
+4:                
+5:                uint16_t sys_envent = 0;
+6:                
+7:                //-----------------------------------------------------------
+8:                //	事件产生
+9:                //-----------------------------------------------------------
+10:               void event_produce(void)
+11:               {
+12:                   uint8_t key = 0;
+13:                   static uint8_t power_key_long_count = 0;
+14:                   static uint8_t key_old = 0;
+15:               
+16:                   key = key_get_result();
+  03E9    1283    CLRB	0x3,5
+  03EA    1303    CLRB	0x3,6
+  03EB    0837    LD	A,0x37
+  03EC    00F4    LD	0x74,A
+17:               
+18:                   if ((key & bit0)) //单击电源键
+  03ED    1874    SZB	0x74,0
+19:                       sys_envent |= POWER_KEY;
+  03EE    1422    SETB	0x22,0
+20:               
+21:                   if ((key & bit2)) //插入充电线
+  03EF    1974    SZB	0x74,2
+22:                       sys_envent |= USB_INSERT;
+  03F0    1522    SETB	0x22,2
+23:               
+24:                   if ((key & bit3)) //充满电
+  03F1    19F4    SZB	0x74,3
+25:                       sys_envent |= CHANGE_FULL;
+  03F2    1722    SETB	0x22,6
+26:               
+27:                   if (key & bit0) //电源键长按
+  03F3    1C74    SNZB	0x74,0
+  03F4    2BFA    JP	0x3FA
+  03F5    30C8    LDIA	0xC8
+28:                   {
+29:                       power_key_long_count++;
+  03F6    0AB5    INCR	0x35
+30:                       if (power_key_long_count >= 200) // 2s
+  03F7    0235    SUBA	0x35
+  03F8    1C03    SNZB	0x3,0
+  03F9    0008    RET
+31:                       {
+32:                           power_key_long_count = 0;
+  03FA    01B5    CLR	0x35
+  03FB    0008    RET
+33:                           // sys_envent |= POWER_KEY;
+34:                       }
+35:                   }
+36:                   else
+37:                   {
+38:                       power_key_long_count = 0;
+39:                   }
+40:               
+41:                   key_old = key;
+42:               }
+43:               
+44:               //-----------------------------------------------------------
+45:               //	事件处理
+46:               //-----------------------------------------------------------
+47:               void event_handle(void)
+48:               {
+49:                   static uint16_t _30s_cnt = 0;
+50:                   uint16_t temp = 1;
+  00F4    01F6    CLR	0x76
+  00F5    0AF6    INCR	0x76
+  00F6    01F7    CLR	0x77
+51:               
+52:                   if (app_flag_sys_ready==0)
+  00F7    1BF0    SZB	0x70,7
+  00F8    2933    JP	0x133
+53:                   {
+54:                       sys_envent = 0;
+  00F9    01A2    CLR	0x22
+  00FA    01A3    CLR	0x23
+  00FB    0008    RET
+55:                       return;
+56:                   }
+57:               
+58:                   while (temp)
+59:                   {   
+60:                       switch (temp) //注意事件顺序
+61:                       {
+62:                       case MODE_KEY:
+63:                           if (sys_envent & temp)
+  00FC    216E    CALL	0x16E
+  00FD    1D03    SNZB	0x3,2
+64:                           {
+65:                               if(app_flag_work)
+  00FE    1F70    SNZB	0x70,6
+  00FF    2930    JP	0x130
+  0100    3004    LDIA	0x4
+66:                               {
+67:                                   app_mode++;
+  0101    0AB9    INCR	0x39
+68:                                   if (app_mode > MODE_D)
+  0102    0239    SUBA	0x39
+  0103    1C03    SNZB	0x3,0
+  0104    2931    JP	0x131
+69:                                       app_mode = MODE_A;
+  0105    01B9    CLR	0x39
+70:                               }
+71:                           }
+72:                           break;
+  0106    2930    JP	0x130
+73:                       case POWER_KEY:
+74:                           if (sys_envent & temp)
+  0107    216E    CALL	0x16E
+  0108    1903    SZB	0x3,2
+  0109    2919    JP	0x119
+75:                           {
+76:                               if (app_flag_usb_insert == 0)
+  010A    1A70    SZB	0x70,4
+  010B    2930    JP	0x130
+77:                               {
+78:                                   app_flag_sleep = 0;
+  010C    1071    CLRB	0x71,0
+79:                                   app_flag_disp_battery_level = 1;
+  010D    1470    SETB	0x70,0
+80:               
+81:                                   if (app_battery_level > BATTERY_LOSE)
+  010E    087B    LD	A,0x7B
+  010F    1903    SZB	0x3,2
+  0110    2930    JP	0x130
+82:                                   {
+83:                                       app_flag_work = 1;
+  0111    1770    SETB	0x70,6
+  0112    2930    JP	0x130
+84:                                   }
+85:                               }
+86:                           }
+87:                           else
+88:                           {
+89:                               app_flag_work = 0;
+90:                           }
+91:                           break;
+92:                       case USB_INSERT:
+93:                           if (sys_envent & temp)
+  0113    216E    CALL	0x16E
+  0114    1903    SZB	0x3,2
+  0115    291B    JP	0x11B
+94:                           {
+95:                               app_flag_sleep = 0;
+  0116    1071    CLRB	0x71,0
+96:                               app_flag_disp_battery_level = 1;
+  0117    1470    SETB	0x70,0
+97:                               app_flag_usb_insert = 1;
+  0118    1670    SETB	0x70,4
+98:                               app_flag_work = 0;
+  0119    1370    CLRB	0x70,6
+99:                           }
+  011A    2930    JP	0x130
+100:                          else
+101:                          {
+102:                              app_flag_usb_insert = 0;
+  011B    1270    CLRB	0x70,4
+103:                              app_flag_charge_full = 0;
+  011C    11F0    CLRB	0x70,3
+  011D    2930    JP	0x130
+104:                          }
+105:                          break;
+106:                      case DIS_BATTERY:
+107:                          if (sys_envent & temp)
+  011E    216E    CALL	0x16E
+  011F    1903    SZB	0x3,2
+  0120    2930    JP	0x130
+108:                          {
+109:                              app_flag_sleep = 0;
+  0121    1071    CLRB	0x71,0
+110:                              app_flag_disp_battery_level = 1;
+  0122    1470    SETB	0x70,0
+  0123    2930    JP	0x130
+111:                          }
+112:                          break;
+113:                      case CHANGE_TEMP_UNIT:
+114:                          if (sys_envent & temp)
+  0124    216E    CALL	0x16E
+  0125    1903    SZB	0x3,2
+  0126    2930    JP	0x130
+115:                          {
+116:                              if (app_flag_temp_unit_C)
+  0127    1CF0    SNZB	0x70,1
+  0128    292B    JP	0x12B
+117:                                  app_flag_temp_unit_C = 0;
+  0129    10F0    CLRB	0x70,1
+  012A    2930    JP	0x130
+118:                              else
+119:                                  app_flag_temp_unit_C = 1;
+  012B    14F0    SETB	0x70,1
+  012C    2930    JP	0x130
+120:                          }
+121:                          break;
+122:                      case CHANGE_FULL:
+123:                          if (sys_envent & temp)
+  012D    216E    CALL	0x16E
+  012E    1D03    SNZB	0x3,2
+124:                              app_flag_charge_full = 1;
+  012F    15F0    SETB	0x70,3
+125:                          break;
+126:                      default:
+127:                          break;
+128:                      }
+129:                      temp <<= 1;
+  0130    1003    CLRB	0x3,0
+  0131    0DF6    RLCR	0x76
+  0132    0DF7    RLCR	0x77
+  0133    0876    LD	A,0x76
+  0134    0477    ORA	0x77
+  0135    1903    SZB	0x3,2
+  0136    2951    JP	0x151
+  0137    0877    LD	A,0x77
+  0138    3A00    XORIA	0x0
+  0139    1903    SZB	0x3,2
+  013A    293C    JP	0x13C
+  013B    2930    JP	0x130
+  013C    0876    LD	A,0x76
+  013D    3A01    XORIA	0x1
+  013E    1903    SZB	0x3,2
+  013F    2907    JP	0x107
+  0140    3A03    XORIA	0x3
+  0141    1903    SZB	0x3,2
+  0142    28FC    JP	0xFC
+  0143    3A06    XORIA	0x6
+  0144    1903    SZB	0x3,2
+  0145    2913    JP	0x113
+  0146    3A14    XORIA	0x14
+  0147    1903    SZB	0x3,2
+  0148    291E    JP	0x11E
+  0149    3A30    XORIA	0x30
+  014A    1903    SZB	0x3,2
+  014B    2924    JP	0x124
+  014C    3A60    XORIA	0x60
+  014D    1903    SZB	0x3,2
+  014E    292D    JP	0x12D
+  014F    2930    JP	0x130
+  0150    2930    JP	0x130
+130:                  }
+131:                  sys_envent = 0;
+  0151    01A2    CLR	0x22
+  0152    01A3    CLR	0x23
+132:              
+133:                  if (app_flag_work)
+  0153    1F70    SNZB	0x70,6
+  0154    2968    JP	0x168
+134:                  {
+135:                      if (app_battery_level == BATTERY_LV0) //低电关机策略, 30s后关机
+  0155    0B7B    SZDECA	0x7B
+  0156    2966    JP	0x166
+136:                      {
+137:                          _30s_cnt++;
+  0157    0AA0    INCR	0x20
+  0158    1903    SZB	0x3,2
+  0159    0AA1    INCR	0x21
+138:                          if (_30s_cnt >= 3000)
+  015A    300B    LDIA	0xB
+  015B    0221    SUBA	0x21
+  015C    30B8    LDIA	0xB8
+  015D    1903    SZB	0x3,2
+  015E    0220    SUBA	0x20
+  015F    1C03    SNZB	0x3,0
+  0160    2968    JP	0x168
+139:                          {
+140:                              _30s_cnt = 0;
+  0161    01A0    CLR	0x20
+  0162    01A1    CLR	0x21
+141:                              app_flag_work = 0;
+  0163    1370    CLRB	0x70,6
+142:                              app_battery_level = BATTERY_LOSE; //强制进入电池耗尽
+  0164    01FB    CLR	0x7B
+  0165    2968    JP	0x168
+143:                          }
+144:                      }
+145:                      else
+146:                      {
+147:                          _30s_cnt = 0;
+  0166    01A0    CLR	0x20
+  0167    01A1    CLR	0x21
+148:                      }
+149:                  }
+150:              
+151:                  //error handle
+152:                  if (app_flag_current_error) //电流错误
+  0168    1970    SZB	0x70,2
+153:                      app_flag_work = 0;
+  0169    1370    CLRB	0x70,6
+154:                  if (app_battery_level <= BATTERY_LOSE) //电池耗尽停止工作
+  016A    087B    LD	A,0x7B
+  016B    1903    SZB	0x3,2
+155:                      app_flag_work = 0;
+  016C    1370    CLRB	0x70,6
+  016D    0008    RET
+156:              }
+---- D:\project\K213A\program\pwm_port.c ----------------------------------------------------------------------
+1:                #include "pwm_port.h"
+2:                #include "gpio_board.h"
+3:                
+4:                uint8_t MM_pwm1_init(void)
+5:                {
+6:                    //将对应引脚TRIS配置为0并开启PWM功能, 即相应引脚为PWM输出
+7:                    TRISB &= ~0B00000010; //RB1
+  0435    1086    CLRB	0x6,1
+8:                
+9:                    //IC PWM均为10BIT
+10:                   //配置PWM1
+11:               	PWMCON0 = 0B00000000; //时钟分频Fosc/1
+  0436    1283    CLRB	0x3,5
+  0437    0193    CLR	0x13
+12:               	PWMCON1 = 0B01000000; //PWM IO配置在B组, 关闭死区, 即关闭互补输出
+  0438    3040    LDIA	0x40
+  0439    0094    LD	0x14,A
+13:               	PWMCON2 = 0B00000000; //关闭PWM反向输出
+  043A    019D    CLR	0x1D
+14:               
+15:                   MM_pwm1_set(140, 0); //周期: 114K
+  043B    308C    LDIA	0x8C
+  043C    00F4    LD	0x74,A
+  043D    01F5    CLR	0x75
+  043E    01F6    CLR	0x76
+  043F    01F7    CLR	0x77
+  0440    22F0    CALL	0x2F0
+16:               	
+17:                   MM_pwm1_start(); //开启PWM1
+  0441    2C68    JP	0x468
+18:               
+19:                   // PWM4TL = 64;             //PWM4周期低8
+20:               	// PWMD4L = 5;               //PWM4占空比低8
+21:               	// PWM4EN=1;		//开启PWM4
+22:               
+23:               	return 0;
+24:               }
+25:               
+26:               uint8_t MM_pwm1_exit(void)
+27:               {
+28:               	return 0;
+29:               }
+30:               
+31:               void MM_pwm1_start(void)
+32:               {
+33:                   PWM1EN = 1; //开启PWM0
+  0468    1283    CLRB	0x3,5
+  0469    1493    SETB	0x13,1
+  046A    0008    RET
+34:               }
+35:               
+36:               void MM_pwm1_suspend(void)
+37:               {
+38:                   PWM1EN = 0; //关闭PWM0
+  0461    1283    CLRB	0x3,5
+  0462    1093    CLRB	0x13,1
+39:                   ULTRASOUND_PWM(0);
+  0463    1086    CLRB	0x6,1
+  0464    0008    RET
+40:               }
+41:               
+42:               /**********************************
+43:                * period: PWM周期, 传入0XFFFF不改变状态
+44:                * Duty: PWM占空比, 传入0XFFFF不改变状态
+45:                * ******************************/
+46:               void MM_pwm1_set(uint16_t Period, uint16_t Duty)
+47:               {
+48:                   uint8_t i = 0;
+49:               
+50:                   //PWM0~3共用周期, PWM4独立
+51:                   //PWM占空比设置顺序, 先高位后低位
+52:                   if (Period != 0XFFFF)
+  02F0    0F74    SZINCA	0x74
+  02F1    2AF5    JP	0x2F5
+  02F2    0A75    INCA	0x75
+  02F3    1903    SZB	0x3,2
+  02F4    2B00    JP	0x300
+53:                   {
+54:                       i = PWMTH;
+  02F5    0816    LD	A,0x16
+  02F6    00C3    LD	0x43,A
+55:                       i &= ~0X03;
+  02F7    30FC    LDIA	0xFC
+  02F8    05C3    ANDR	0x43
+56:                       i |= (Period>>8)&0X03;
+  02F9    0875    LD	A,0x75
+  02FA    3903    ANDIA	0x3
+  02FB    04C3    ORR	0x43
+57:                       PWMTH = i; //Bit1~Bit0 PWMT[9:8]: PWM0~PWM3周期高2位
+  02FC    0843    LD	A,0x43
+  02FD    0096    LD	0x16,A
+58:                       PWMTL = (uint8_t)Period; //PWM0~3周期低8位
+  02FE    0874    LD	A,0x74
+  02FF    0095    LD	0x15,A
+59:                   }
+60:               
+61:                   if (Duty != 0XFFFF)
+  0300    0F76    SZINCA	0x76
+  0301    2B05    JP	0x305
+  0302    0A77    INCA	0x77
+  0303    1903    SZB	0x3,2
+  0304    0008    RET
+62:                   {
+63:                       i = PWMD01H;
+  0305    081C    LD	A,0x1C
+  0306    00C3    LD	0x43,A
+64:                       i &= ~0X30;
+  0307    30CF    LDIA	0xCF
+  0308    05C3    ANDR	0x43
+65:                       i |= (Duty & 0X0300) >> 4;
+  0309    0877    LD	A,0x77
+  030A    00F9    LD	0x79,A
+  030B    0876    LD	A,0x76
+  030C    00F8    LD	0x78,A
+  030D    3004    LDIA	0x4
+  030E    1003    CLRB	0x3,0
+  030F    0CF9    RRCR	0x79
+  0310    0CF8    RRCR	0x78
+  0311    3EFF    ADDIA	0xFF
+  0312    1D03    SNZB	0x3,2
+  0313    2B0E    JP	0x30E
+  0314    0878    LD	A,0x78
+  0315    3930    ANDIA	0x30
+  0316    04C3    ORR	0x43
+66:                       PWMD01H = i; //PWM1[5:4]和PWM0[1:0] 占空比高2
+  0317    0843    LD	A,0x43
+  0318    009C    LD	0x1C,A
+67:                       PWMD1L = (uint8_t)Duty; //PWM1占空比低8
+  0319    0876    LD	A,0x76
+  031A    0098    LD	0x18,A
+  031B    0008    RET
+68:                   }
+69:               }
+70:               
+71:               /**********************************
+72:                * Duty: PWM占空比, 传入0XFFFF不改变状态
+73:                * ******************************/
+74:               void MM_pwm1_set_duty(uint16_t Duty)
+75:               {
+76:                   uint8_t i = 0;
+77:               
+78:                   if (Duty != 0XFFFF)
+  038B    0F74    SZINCA	0x74
+  038C    2B90    JP	0x390
+  038D    0A75    INCA	0x75
+  038E    1903    SZB	0x3,2
+  038F    0008    RET
+79:                   {
+80:                       i = PWMD01H;
+  0390    081C    LD	A,0x1C
+  0391    00F8    LD	0x78,A
+81:                       i &= ~0X30;
+  0392    30CF    LDIA	0xCF
+  0393    05F8    ANDR	0x78
+82:                       i |= (Duty & 0X0300) >> 4;
+  0394    0875    LD	A,0x75
+  0395    00F7    LD	0x77,A
+  0396    0874    LD	A,0x74
+  0397    00F6    LD	0x76,A
+  0398    3004    LDIA	0x4
+  0399    1003    CLRB	0x3,0
+  039A    0CF7    RRCR	0x77
+  039B    0CF6    RRCR	0x76
+  039C    3EFF    ADDIA	0xFF
+  039D    1D03    SNZB	0x3,2
+  039E    2B99    JP	0x399
+  039F    0876    LD	A,0x76
+  03A0    3930    ANDIA	0x30
+  03A1    04F8    ORR	0x78
+83:                       PWMD01H = i;
+  03A2    0878    LD	A,0x78
+  03A3    009C    LD	0x1C,A
+84:                       PWMD1L = (uint8_t)Duty;
+  03A4    0874    LD	A,0x74
+  03A5    0098    LD	0x18,A
+  03A6    0008    RET
+85:                   }
+86:               }
+---- D:\project\K213A\program\adc_port.c ----------------------------------------------------------------------
+1:                #include "adc_port.h"
+2:                
+3:                uint8_t MM_adc1_init(void)
+4:                {
+5:                    //设置模拟IO
+6:                    // RA4
+7:                    TRISA |= 0B00010000;  //1设置为输入口, 0配置为输出口
+  040B    1683    SETB	0x3,5
+  040C    1605    SETB	0x5,4
+8:                    ANSEL0 |= 0B00010000; //1配置为模拟口, 0配置为普通IO或特殊功能
+  040D    1283    CLRB	0x3,5
+  040E    1703    SETB	0x3,6
+  040F    1610    SETB	0x10,4
+9:                    // RB0
+10:                   // TRISB |= 0B00000001;  //1设置为输入口, 0配置为输出口
+11:                   // ANSEL1 |= 0B00000001; //1配置为模拟口, 0配置为普通IO或特殊功能
+12:               
+13:                   //设置ADC的运行模式
+14:                   ADCON0 = 0B10000000; //设置ADC时钟为Fsys/32
+  0410    3080    LDIA	0x80
+  0411    1683    SETB	0x3,5
+  0412    1303    CLRB	0x3,6
+  0413    009D    LD	0x1D,A
+15:                   ADCON1 = 0; //ADC结果为左对齐12bit
+  0414    019C    CLR	0x1C
+16:               
+17:                   //设置ADC转换通道
+18:                   MM_adc1_set_channel(MTF_ADC_CH4); //切换通道后建议500ns后开采样
+  0415    3004    LDIA	0x4
+  0416    2346    CALL	0x346
+19:               
+20:                   //设置参考电压
+21:                   MM_adc1_set_ref(MTF_ADC_VREF_2P4V);
+  0417    3000    LDIA	0x0
+  0418    241A    CALL	0x41A
+22:               
+23:                   //设置ADC中断
+24:                   // ADC_EnableInt();
+25:                   // IRQ_SET_PRIORITY(IRQ_ADC,IRQ_PRIORITY_HIGH);
+26:                   // IRQ_ALL_ENABLE();
+27:               
+28:                   //开启ADC
+29:                   MM_adc1_start();
+  0419    2C6B    JP	0x46B
+30:               
+31:                   return 0;
+32:               }
+33:               
+34:               uint8_t MM_adc1_exit(void)
+35:               {
+36:                   return 0;
+37:               }
+38:               
+39:               void MM_adc1_start(void)
+40:               {
+41:                   //开启ADC模块
+42:                   ADCON0 |= 0X01;
+  046B    1683    SETB	0x3,5
+  046C    141D    SETB	0x1D,0
+  046D    0008    RET
+43:               }
+44:               
+45:               void MM_adc1_suspend(void)
+46:               {
+47:                   //停止ADC模块
+48:                   ADCON0 &= ~0X01;
+  0465    1683    SETB	0x3,5
+  0466    101D    CLRB	0x1D,0
+  0467    0008    RET
+49:               }
+50:               
+51:               void MM_adc1_set_ref(uint8_t ref)
+  041A    00F4    LD	0x74,A
+52:               {
+53:                   //设置参考电压
+54:                   if (ref == MTF_ADC_VREF_VDD)
+  041B    3A04    XORIA	0x4
+  041C    1D03    SNZB	0x3,2
+  041D    2C20    JP	0x420
+55:                   {
+56:                       ADCON1 &= ~0X04;
+  041E    111C    CLRB	0x1C,2
+57:                   }
+  041F    0008    RET
+58:                   else
+59:                   {
+60:                       //设置ADC LDO
+61:                       ADCON1 |= 0X04;        //开启后只能使用MCU LDO参考电压, 关闭后使用VDD参考电压
+  0420    151C    SETB	0x1C,2
+62:                       if (ref == MTF_ADC_VREF_2V)
+  0421    0B74    SZDECA	0x74
+  0422    2C24    JP	0x424
+63:                           ADCON1 |= 0X01;
+  0423    141C    SETB	0x1C,0
+64:                       if (ref == MTF_ADC_VREF_2P4V)
+  0424    0874    LD	A,0x74
+  0425    1903    SZB	0x3,2
+65:                           ADCON1 &= ~0X01;
+  0426    101C    CLRB	0x1C,0
+  0427    0008    RET
+66:                   }
+67:               }
+68:               
+69:               void MM_adc1_set_channel(uint8_t channel)
+  0346    00F5    LD	0x75,A
+70:               {
+71:                   if (channel <= 15)
+  0347    3010    LDIA	0x10
+  0348    0275    SUBA	0x75
+  0349    1803    SZB	0x3,0
+  034A    2B5A    JP	0x35A
+72:                   {
+73:                       ADCON0 &= ~0X3C;
+  034B    30C3    LDIA	0xC3
+  034C    059D    ANDR	0x1D
+74:                       ADCON0 |= channel << 2; // BIT3~0
+  034D    0875    LD	A,0x75
+  034E    00F4    LD	0x74,A
+  034F    3001    LDIA	0x1
+  0350    1003    CLRB	0x3,0
+  0351    0DF4    RLCR	0x74
+  0352    3EFF    ADDIA	0xFF
+  0353    1003    CLRB	0x3,0
+  0354    1D03    SNZB	0x3,2
+  0355    2B51    JP	0x351
+  0356    0D74    RLCA	0x74
+  0357    049D    ORR	0x1D
+75:                       ADCON1 &= ~0X40;        // BIT4
+  0358    131C    CLRB	0x1C,6
+76:                   }
+  0359    0008    RET
+77:                   else if (channel <= 18)
+  035A    3013    LDIA	0x13
+  035B    0275    SUBA	0x75
+  035C    1803    SZB	0x3,0
+  035D    0008    RET
+78:                   {
+79:                       ADCON0 &= ~0X3C;
+  035E    30C3    LDIA	0xC3
+  035F    059D    ANDR	0x1D
+80:                       ADCON0 |= (channel & 0X0F) << 2; // BIT3~0
+  0360    0875    LD	A,0x75
+  0361    390F    ANDIA	0xF
+  0362    00F4    LD	0x74,A
+  0363    3001    LDIA	0x1
+  0364    1003    CLRB	0x3,0
+  0365    0DF4    RLCR	0x74
+  0366    3EFF    ADDIA	0xFF
+  0367    1003    CLRB	0x3,0
+  0368    1D03    SNZB	0x3,2
+  0369    2B65    JP	0x365
+  036A    0D74    RLCA	0x74
+  036B    049D    ORR	0x1D
+81:                       ADCON1 |= 0X40;                  // BIT4
+  036C    171C    SETB	0x1C,6
+  036D    0008    RET
+82:                   }
+83:               }
+---- D:\project\K213A\program\display_board.c ----------------------------------------------------------------------
+1:                #include "display_board.h"
+2:                
+3:                static uint8_t dis_start = 0;
+4:                
+5:                /*************************************************
+6:                 // 函数名称    : uint8_t Led_Display_init(void)
+7:                 // 功能描述    : 开启LED显示
+8:                 // 入口参数    : 无
+9:                 // 出口参数    : 无
+10:               ***************************************************/
+11:               void Led_Display_init(void)
+12:               {
+13:                 dis_start = 1;
+  045C    1283    CLRB	0x3,5
+  045D    1303    CLRB	0x3,6
+  045E    01B3    CLR	0x33
+  045F    0AB3    INCR	0x33
+  0460    0008    RET
+14:               }
+15:               
+16:               /*************************************************
+17:                // 函数名称    : uint8_t Led_Display_exit(void)
+18:                // 功能描述    : 关闭LED显示
+19:                // 入口参数    : 无
+20:                // 出口参数    : 无
+21:               ***************************************************/
+22:               void Led_Display_exit(void)
+23:               {
+24:                 dis_start = 0;
+  0442    1283    CLRB	0x3,5
+  0443    1303    CLRB	0x3,6
+  0444    01B3    CLR	0x33
+25:                 LED1W_PIN_OFF;
+  0445    1405    SETB	0x5,0
+26:                 LED1R_PIN_OFF;
+  0446    1505    SETB	0x5,2
+27:                 LED2W_PIN_OFF;
+  0447    1506    SETB	0x6,2
+28:                 LED2R_PIN_OFF;
+  0448    1586    SETB	0x6,3
+29:                 LIGHT_PIN_OFF;
+  0449    1206    CLRB	0x6,4
+  044A    0008    RET
+30:               }
+31:               
+32:               /*************************************************
+33:                // 函数名称    : Led_Dis_Update
+34:                // 功能描述    : 显存更新到led
+35:                // 入口参数    : 无
+36:                // 出口参数    : 无
+37:               ***************************************************/
+38:               void Led_Dis_Update(void)
+39:               {
+40:                   LED_data = LED_data_buf;
+  046E    0834    LD	A,0x34
+  046F    00FA    LD	0x7A,A
+  0470    0008    RET
+41:               }
+42:               
+43:               /*************************************************
+44:                // 函数名称    : Led_Clear_All
+45:                // 功能描述    : 清除所有显示
+46:                // 入口参数    : 无
+47:                // 出口参数    : 无
+48:               ***************************************************/
+49:               void Led_Clear_All(void)
+50:               {
+51:                 LED_data_buf = 0;
+  0478    01B4    CLR	0x34
+  0479    0008    RET
+52:               }
+53:               
+54:               /*************************************************
+55:                // 函数名称    : Led_dis_All
+56:                // 功能描述    : 所有显示
+57:                // 入口参数    : 无
+58:                // 出口参数    : 无
+59:               ***************************************************/
+60:               void Led_dis_All(void)
+61:               {
+62:                   LED_data_buf = 0XFF;
+  0471    30FF    LDIA	0xFF
+  0472    00B4    LD	0x34,A
+  0473    0008    RET
+63:               }
+64:               
+65:               /*************************************************
+66:                // 函数名称    : Led_scan
+67:                // 功能描述    : 此函数在定时中执行
+68:                // 入口参数    : 无
+69:                // 出口参数    : 无
+70:               ***************************************************/
+71:               uint8_t LED_data = 0; //数码管显示输出缓存
+72:               uint8_t LED_data_buf = 0; //LED显示data
+73:               void Led_Scan(void)
+74:               {
+75:                 if (dis_start==0)
+  036E    0833    LD	A,0x33
+  036F    1903    SZB	0x3,2
+  0370    0008    RET
+76:                   return;
+77:                 
+78:                 if (LED_data&0X01)
+  0371    1C7A    SNZB	0x7A,0
+  0372    2B75    JP	0x375
+79:                   LED1W_PIN_ON;
+  0373    1005    CLRB	0x5,0
+  0374    2B76    JP	0x376
+80:                 else
+81:                   LED1W_PIN_OFF;
+  0375    1405    SETB	0x5,0
+82:               
+83:                 if (LED_data&0X02)
+  0376    1CFA    SNZB	0x7A,1
+  0377    2B7A    JP	0x37A
+84:                   LED1R_PIN_ON;
+  0378    1105    CLRB	0x5,2
+  0379    2B7B    JP	0x37B
+85:                 else
+86:                   LED1R_PIN_OFF;
+  037A    1505    SETB	0x5,2
+87:               
+88:                 if (LED_data&0X04)
+  037B    1D7A    SNZB	0x7A,2
+  037C    2B7F    JP	0x37F
+89:                   LED2W_PIN_ON;
+  037D    1106    CLRB	0x6,2
+  037E    2B80    JP	0x380
+90:                 else
+91:                   LED2W_PIN_OFF;
+  037F    1506    SETB	0x6,2
+92:               
+93:                 if (LED_data&0X08)
+  0380    1DFA    SNZB	0x7A,3
+  0381    2B84    JP	0x384
+94:                   LED2R_PIN_ON;
+  0382    1186    CLRB	0x6,3
+  0383    2B85    JP	0x385
+95:                 else
+96:                   LED2R_PIN_OFF;
+  0384    1586    SETB	0x6,3
+97:               
+98:                 if (LED_data&0X10)
+  0385    1E7A    SNZB	0x7A,4
+  0386    2B89    JP	0x389
+99:                   LIGHT_PIN_ON;
+  0387    1606    SETB	0x6,4
+  0388    0008    RET
+100:                else
+101:                  LIGHT_PIN_OFF;
+  0389    1206    CLRB	0x6,4
+  038A    0008    RET
+102:              }
+---- D:\project\K213A\program\adc_board.c ----------------------------------------------------------------------
+1:                #include "adc_board.h"
+2:                // #include "stdio.h"
+3:                
+4:                // #define MTF_ADC_debug(...) printf(__VA_ARGS__)
+5:                
+6:                uint16_t _adc_value[ADC_CHANNEL_TOTAL] = {2047};
+7:                void adc_run(void)
+8:                {
+9:                    static uint16_t adc_result = 20000;
+10:                   static uint8_t sample_count = 255, channel_count = 0, _reject_count = 0;
+11:               
+12:                   if (sample_count >= 8)
+  01F0    3008    LDIA	0x8
+  01F1    1283    CLRB	0x3,5
+  01F2    1303    CLRB	0x3,6
+  01F3    0242    SUBA	0x42
+  01F4    1C03    SNZB	0x3,0
+  01F5    2A11    JP	0x211
+13:                   {
+14:                       sample_count = 0;                            //单通道采样次数
+  01F6    01C2    CLR	0x42
+15:                       _reject_count = 0;
+  01F7    01AE    CLR	0x2E
+16:               
+17:                       // _adc_value[channel_count] = adc_result >> 3; // adc_result/8, 注意复位的第一次值
+18:                       //因在51 MCU上 _adc_value[channel_count] 处理慢
+19:                       if (channel_count == 0)
+  01F8    082F    LD	A,0x2F
+  01F9    1D03    SNZB	0x3,2
+  01FA    2A0C    JP	0x20C
+20:                           _adc_value[0] = adc_result >> 3;
+  01FB    083B    LD	A,0x3B
+  01FC    00F5    LD	0x75,A
+  01FD    083A    LD	A,0x3A
+  01FE    00F4    LD	0x74,A
+  01FF    1003    CLRB	0x3,0
+  0200    0CF5    RRCR	0x75
+  0201    0CF4    RRCR	0x74
+  0202    1003    CLRB	0x3,0
+  0203    0CF5    RRCR	0x75
+  0204    0CF4    RRCR	0x74
+  0205    1003    CLRB	0x3,0
+  0206    0CF5    RRCR	0x75
+  0207    0CF4    RRCR	0x74
+  0208    0874    LD	A,0x74
+  0209    00C0    LD	0x40,A
+  020A    0875    LD	A,0x75
+  020B    00C1    LD	0x41,A
+21:                       // else if (channel_count == 1)
+22:                       //     _adc_value[1] = adc_result >> 3;
+23:                       adc_result = 0;
+  020C    01BA    CLR	0x3A
+  020D    01BB    CLR	0x3B
+24:               
+25:                       if (++channel_count >= ADC_CHANNEL_TOTAL)
+  020E    0FAF    SZINCR	0x2F
+26:                       {
+27:                           channel_count = 0;
+  020F    01AF    CLR	0x2F
+  0210    0008    RET
+28:                           // printf("ad: %d, %d, %d\r\n", _adc_value[0], _adc_value[1], _adc_value[2]);
+29:                       }
+30:               
+31:                       //为保证结果准确度, 切换通道后建议500ns后开采样
+32:                       if (channel_count == 0) // battery
+33:                       {
+34:                           // MM_adc1_set_ref(MTF_ADC_VREF_2P4V);
+35:                           // MM_adc1_set_channel(MTF_ADC_CH4);
+36:                       }
+37:                       else // motor current
+38:                       {
+39:                           // MM_adc1_set_ref(MTF_ADC_VREF_2P4V);
+40:                           // MM_adc1_set_channel(MTF_ADC_CH15);
+41:                       }
+42:                   }
+43:                   else
+44:                   {
+45:                       if (++_reject_count >= 2)
+  0211    3002    LDIA	0x2
+  0212    0AAE    INCR	0x2E
+  0213    022E    SUBA	0x2E
+46:                       {
+47:                           // if (MM_adc1_get_state() == 0) //是否转换完成
+48:                           {
+49:                               adc_result += MM_adc1_get_result(); //获取AD值
+  0214    1683    SETB	0x3,5
+  0215    1C03    SNZB	0x3,0
+  0216    2A3C    JP	0x23C
+  0217    081F    LD	A,0x1F
+  0218    00F4    LD	0x74,A
+  0219    3004    LDIA	0x4
+  021A    1003    CLRB	0x3,0
+  021B    0CF4    RRCR	0x74
+  021C    3EFF    ADDIA	0xFF
+  021D    1D03    SNZB	0x3,2
+  021E    2A1A    JP	0x21A
+  021F    081E    LD	A,0x1E
+  0220    00F5    LD	0x75,A
+  0221    30F0    LDIA	0xF0
+  0222    01F6    CLR	0x76
+  0223    0EF5    SWAPR	0x75
+  0224    0EF6    SWAPR	0x76
+  0225    05F6    ANDR	0x76
+  0226    0875    LD	A,0x75
+  0227    390F    ANDIA	0xF
+  0228    04F6    ORR	0x76
+  0229    30F0    LDIA	0xF0
+  022A    05F5    ANDR	0x75
+  022B    0874    LD	A,0x74
+  022C    0775    ADDA	0x75
+  022D    00F7    LD	0x77,A
+  022E    3000    LDIA	0x0
+  022F    1803    SZB	0x3,0
+  0230    3001    LDIA	0x1
+  0231    0776    ADDA	0x76
+  0232    00F8    LD	0x78,A
+  0233    0877    LD	A,0x77
+  0234    1283    CLRB	0x3,5
+  0235    07BA    ADDR	0x3A
+  0236    1803    SZB	0x3,0
+  0237    0ABB    INCR	0x3B
+  0238    0878    LD	A,0x78
+  0239    07BB    ADDR	0x3B
+50:                               sample_count++;
+  023A    0AC2    INCR	0x42
+51:                           }
+52:                       }
+53:                       MM_adc1_convert_start(); //开启转换
+  023B    1683    SETB	0x3,5
+  023C    149D    SETB	0x1D,1
+  023D    0008    RET
+54:                   }
+55:               }
+---- D:\project\K213A\program\timer_port.c ----------------------------------------------------------------------
+1:                #include "timer_port.h"
+2:                #include "types_base.h"
+3:                
+4:                //开启定时器
+5:                void MTF_timer_init_handle(void)
+6:                {
+7:                	OSCCON = 0x50; //系统时钟设置, 内部震荡Fsys=Fosc/4, Fsys源由CONFIG选择
+  03FC    3050    LDIA	0x50
+  03FD    0088    LD	0x8,A
+8:                
+9:                	//设置定时器2
+10:               	PR2 = 199; //赋初值
+  03FE    30C7    LDIA	0xC7
+  03FF    0091    LD	0x11,A
+11:               	T2CON = 0B00000001; //模块输入时钟以此为基础(T2 = Fsys/4), 无分频
+  0400    3001    LDIA	0x1
+  0401    1283    CLRB	0x3,5
+  0402    0092    LD	0x12,A
+12:               	TMR2ON = 1; //使能timer2
+  0403    1512    SETB	0x12,2
+13:               	TMR2 = 0; //timer2计数器
+  0404    0191    CLR	0x11
+14:               	TMR2IF = 0; //清中断标志位
+  0405    1703    SETB	0x3,6
+  0406    1085    CLRB	0x5,1
+15:               	TMR2IE = 1; //开timer2中断
+  0407    1486    SETB	0x6,1
+16:               
+17:               	PEIE = 1; //允许外设所有未被屏蔽中断
+  0408    170B    SETB	0xB,6
+18:               	GIE = 1; //开总中断
+  0409    178B    SETB	0xB,7
+  040A    0008    RET
+19:               }
+20:               
+21:               void MTF_timer_start(void)
+22:               {
+23:               	TMR2ON = 1; //开启定时器
+24:               }
+25:               
+26:               void MTF_timer_suspend(void)
+27:               {
+28:               	TMR2ON = 0; //暂停定时器
+29:               }
+---- D:\project\K213A\program\display_define.c ----------------------------------------------------------------------
+1:                #include "display_define.h"
+2:                #include "app_global.h"
+3:                
+4:                /***********************************************
+5:                 * 显示放电剩余电量
+6:                *************************************************/
+7:                static void dis_residue_battery(void)
+8:                {
+9:                  //显示放电剩余电量
+10:                 if (app_battery_level <= BATTERY_LV1)
+  03BF    3003    LDIA	0x3
+  03C0    027B    SUBA	0x7B
+  03C1    1803    SZB	0x3,0
+  03C2    2BC5    JP	0x3C5
+11:                 {
+12:                   led1_locate;
+  03C3    1434    SETB	0x34,0
+13:                 }
+  03C4    0008    RET
+14:                 else if (app_battery_level <= BATTERY_LV2)
+  03C5    3004    LDIA	0x4
+  03C6    027B    SUBA	0x7B
+  03C7    1803    SZB	0x3,0
+  03C8    2BCC    JP	0x3CC
+15:                 {
+16:                   led2_locate;
+  03C9    14B4    SETB	0x34,1
+17:                   led1_locate;
+  03CA    1434    SETB	0x34,0
+18:                 }
+  03CB    0008    RET
+19:                 else if (app_battery_level <= BATTERY_FULL)
+  03CC    3005    LDIA	0x5
+  03CD    027B    SUBA	0x7B
+  03CE    1803    SZB	0x3,0
+  03CF    0008    RET
+20:                 {
+21:                   led3_locate;
+22:                   led2_locate;
+23:                   led1_locate;
+  03D0    2BD1    JP	0x3D1
+24:                 }
+25:               }
+26:               
+27:               /*************************************************
+28:                // 函数名称    : LedDsp_content
+29:                // 功能描述    : 用户定义显示函数
+30:                // 入口参数    : 无
+31:                // 出口参数    : 无
+32:               ***************************************************/
+33:               static void LedDsp_content(void)
+34:               {
+35:                 static uint8_t _dis_charge_500ms = 0, _dis_charge_cnt = 0;
+36:                 static uint8_t _dis_500ms_cnt = 0, _dis_500ms = 0, _flash_cnt = 0, _dis_2s_cnt = 0;
+37:               
+38:                 if(app_flag_sys_ready==0)
+  0176    1BF0    SZB	0x70,7
+  0177    2979    JP	0x179
+39:                 {
+40:                   Led_dis_All(); //上电准备时全显
+  0178    2C71    JP	0x471
+41:                   return;
+42:                 }
+43:               
+44:                 Led_Clear_All(); //清除所有显示数据
+  0179    2478    CALL	0x478
+45:               
+46:                 if (app_flag_usb_insert) //整体策略上禁止充电时睡眠
+  017A    1E70    SNZB	0x70,4
+  017B    29AD    JP	0x1AD
+47:                 {
+48:                   if (app_flag_charge_full)
+  017C    1DF0    SNZB	0x70,3
+  017D    297F    JP	0x17F
+49:                   {
+50:                     led3_locate;
+51:                     led2_locate;
+52:                     led1_locate;
+53:                   }
+  017E    2BD1    JP	0x3D1
+  017F    3032    LDIA	0x32
+54:                   else
+55:                   {
+56:                     //显示充电电量
+57:                     _dis_charge_500ms++;
+  0180    0AAD    INCR	0x2D
+58:                     if (_dis_charge_500ms >= 50)
+  0181    022D    SUBA	0x2D
+  0182    1C03    SNZB	0x3,0
+  0183    299D    JP	0x19D
+  0184    3004    LDIA	0x4
+59:                     {
+60:                       _dis_charge_500ms = 0;
+  0185    01AD    CLR	0x2D
+61:               
+62:                       _dis_charge_cnt++;
+  0186    0AAC    INCR	0x2C
+63:                       if (_dis_charge_cnt >= 4)
+  0187    022C    SUBA	0x2C
+  0188    1C03    SNZB	0x3,0
+  0189    299D    JP	0x19D
+64:                       {
+65:                         if (app_battery_level <= BATTERY_LV1)
+  018A    3003    LDIA	0x3
+  018B    027B    SUBA	0x7B
+  018C    1803    SZB	0x3,0
+  018D    2990    JP	0x190
+66:                         {
+67:                           _dis_charge_cnt = 0;
+  018E    01AC    CLR	0x2C
+68:                         }
+  018F    299D    JP	0x19D
+69:                         else if (app_battery_level <= BATTERY_LV2)
+  0190    3004    LDIA	0x4
+  0191    027B    SUBA	0x7B
+  0192    1803    SZB	0x3,0
+  0193    2997    JP	0x197
+70:                         {
+71:                           _dis_charge_cnt = 1;
+  0194    01AC    CLR	0x2C
+  0195    0AAC    INCR	0x2C
+72:                         }
+  0196    299D    JP	0x19D
+73:                         else if (app_battery_level <= BATTERY_FULL)
+  0197    3005    LDIA	0x5
+  0198    027B    SUBA	0x7B
+  0199    1803    SZB	0x3,0
+  019A    299D    JP	0x19D
+74:                         {
+75:                           _dis_charge_cnt = 2;
+  019B    3002    LDIA	0x2
+  019C    00AC    LD	0x2C,A
+76:                         }
+77:                       }
+78:                     }
+79:                     if (_dis_charge_cnt == 1)
+  019D    0B2C    SZDECA	0x2C
+  019E    29A1    JP	0x1A1
+80:                     {
+81:                       led1_locate;
+  019F    1434    SETB	0x34,0
+82:                     }
+  01A0    0008    RET
+83:                     else if (_dis_charge_cnt == 2)
+  01A1    3002    LDIA	0x2
+  01A2    062C    XORA	0x2C
+  01A3    1D03    SNZB	0x3,2
+  01A4    29A8    JP	0x1A8
+84:                     {
+85:                       led2_locate;
+  01A5    14B4    SETB	0x34,1
+86:                       led1_locate;
+  01A6    1434    SETB	0x34,0
+87:                     }
+  01A7    0008    RET
+88:                     else if (_dis_charge_cnt == 3)
+  01A8    3003    LDIA	0x3
+  01A9    062C    XORA	0x2C
+  01AA    1D03    SNZB	0x3,2
+  01AB    0008    RET
+  01AC    297E    JP	0x17E
+  01AD    3002    LDIA	0x2
+89:                     {
+90:                       led3_locate;
+91:                       led2_locate;
+92:                       led1_locate;
+93:                     }
+94:                   }
+95:                 }
+96:                 else
+97:                 {
+98:                   _dis_charge_cnt = 0;
+  01AE    01AC    CLR	0x2C
+99:                   _dis_charge_500ms = 0;
+  01AF    01AD    CLR	0x2D
+100:              
+101:                  if (app_battery_level <= BATTERY_LV0 || app_flag_work == 0)
+  01B0    027B    SUBA	0x7B
+  01B1    1C03    SNZB	0x3,0
+  01B2    29B5    JP	0x1B5
+  01B3    1B70    SZB	0x70,6
+  01B4    29CD    JP	0x1CD
+  01B5    3032    LDIA	0x32
+102:                  {
+103:                    _dis_500ms_cnt++;
+  01B6    0AAB    INCR	0x2B
+104:                    if (_dis_500ms_cnt >= 50)
+  01B7    022B    SUBA	0x2B
+  01B8    1C03    SNZB	0x3,0
+  01B9    29D1    JP	0x1D1
+105:                    {
+106:                      _dis_500ms_cnt = 0;
+  01BA    01AB    CLR	0x2B
+107:              
+108:                      if (app_battery_level <= BATTERY_LOSE)
+  01BB    087B    LD	A,0x7B
+  01BC    1D03    SNZB	0x3,2
+  01BD    29C0    JP	0x1C0
+109:                        _flash_cnt++;
+  01BE    0AA9    INCR	0x29
+  01BF    29C1    JP	0x1C1
+110:                      else
+111:                        _flash_cnt = 0;
+  01C0    01A9    CLR	0x29
+112:              
+113:                      if (app_battery_level <= BATTERY_LV0)
+  01C1    3002    LDIA	0x2
+  01C2    027B    SUBA	0x7B
+  01C3    1803    SZB	0x3,0
+  01C4    29C7    JP	0x1C7
+114:                        _dis_500ms ^= 0X01;
+  01C5    3001    LDIA	0x1
+  01C6    06AA    XORR	0x2A
+115:              
+116:                      if (app_flag_work == 0)
+  01C7    1B70    SZB	0x70,6
+  01C8    29CB    JP	0x1CB
+117:                        _dis_2s_cnt++;
+  01C9    0AA8    INCR	0x28
+  01CA    29D1    JP	0x1D1
+118:                      else
+119:                        _dis_2s_cnt = 0;
+  01CB    01A8    CLR	0x28
+  01CC    29D1    JP	0x1D1
+120:                    }
+121:                  }
+122:                  else
+123:                  {
+124:                    _dis_500ms_cnt = 0;
+  01CD    01AB    CLR	0x2B
+125:                    _flash_cnt = 0;
+  01CE    01A9    CLR	0x29
+126:                    _dis_2s_cnt = 0;
+  01CF    01A8    CLR	0x28
+127:                    _dis_500ms = 0;
+  01D0    01AA    CLR	0x2A
+128:                  }
+129:              
+130:                  if (app_battery_level <= BATTERY_LV0)
+  01D1    3002    LDIA	0x2
+  01D2    027B    SUBA	0x7B
+  01D3    1803    SZB	0x3,0
+  01D4    29DA    JP	0x1DA
+131:                  {
+132:                    if (_dis_500ms) //低电闪烁
+  01D5    082A    LD	A,0x2A
+  01D6    1903    SZB	0x3,2
+  01D7    29DB    JP	0x1DB
+133:                      Led_dis_All();
+  01D8    2471    CALL	0x471
+  01D9    29DB    JP	0x1DB
+134:                  }
+135:                  else
+136:                  {
+137:                    dis_residue_battery();
+  01DA    23BF    CALL	0x3BF
+138:                  }
+139:              
+140:                  if (app_flag_work == 0)
+  01DB    1B70    SZB	0x70,6
+  01DC    29E7    JP	0x1E7
+141:                  {
+142:                    if (app_battery_level <= BATTERY_LOSE)
+  01DD    087B    LD	A,0x7B
+  01DE    1D03    SNZB	0x3,2
+  01DF    29E3    JP	0x1E3
+143:                    {
+144:                      if (_flash_cnt >= 6) //低电睡眠策略, 闪3次后睡眠
+  01E0    3006    LDIA	0x6
+  01E1    0229    SUBA	0x29
+  01E2    29E5    JP	0x1E5
+145:                      {
+146:                        app_flag_disp_battery_level = 0;
+  01E6    1070    CLRB	0x70,0
+147:                      }
+148:                    }
+149:                    else
+150:                    {
+151:                      if (_dis_2s_cnt >= 4) //正常睡眠策略, 延时2s
+  01E3    3004    LDIA	0x4
+  01E4    0228    SUBA	0x28
+  01E5    1803    SZB	0x3,0
+152:                      {
+153:                        app_flag_disp_battery_level = 0;
+154:                      }
+155:                    }
+156:                  }
+157:              
+158:                  if (!app_flag_disp_battery_level)
+  01E7    1870    SZB	0x70,0
+  01E8    0008    RET
+159:                  {
+160:                    Led_Clear_All();
+  01E9    2478    CALL	0x478
+161:                    _dis_500ms_cnt = 0;
+  01EA    01AB    CLR	0x2B
+162:                    _flash_cnt = 0;
+  01EB    01A9    CLR	0x29
+163:                    _dis_2s_cnt = 0;
+  01EC    01A8    CLR	0x28
+164:                    _dis_500ms = 0;
+  01ED    01AA    CLR	0x2A
+165:                    app_flag_sleep = 1; //进入睡眠命令统一由此发出, 由sleep运行event_handle退出, 流程为, 先停止工作(但可显示), 再进睡眠
+  01EE    1471    SETB	0x71,0
+  01EF    0008    RET
+166:                  }
+167:                }
+168:              }
+169:              
+170:              /*************************************************
+171:               // 函数名称    : Led_display
+172:               // 功能描述    :
+173:               // 入口参数    : 无
+174:               // 出口参数    : 无
+175:              ***************************************************/
+176:              void Led_display(void)
+177:              { 
+178:                LedDsp_content();
+  0476    2176    CALL	0x176
+179:                Led_Dis_Update();
+  0477    2C6E    JP	0x46E
+180:              }
+---- D:\project\K213A\program\isr.c ----------------------------------------------------------------------
+1:                /****************************************************************************/
+2:                /** \file isr.c
+3:                **
+4:                **
+5:                **
+6:                **	History:
+7:                **
+8:                *****************************************************************************/
+9:                /****************************************************************************/
+10:               /*	include files
+11:               *****************************************************************************/
+12:               #include "types_base.h"
+13:               #include "app_timer.h"
+14:               
+15:               /*-------------------------------------------------
+16:                *  函数名：中断
+17:                *	功能： CMS内核唯一中断入口
+18:                *  输入：  无
+19:                *  输出：  无
+20:                --------------------------------------------------*/
+21:               void interrupt _Isr() // PIC_HI-TECH使用
+22:               {
+23:               	//定时器2的中断处理**********************
+24:               	if (TMR2IF)
+  03D5    1283    CLRB	0x3,5
+  03D6    1703    SETB	0x3,6
+  03D7    1C85    SNZB	0x5,1
+  03D8    2BDB    JP	0x3DB
+25:               	{
+26:               		TMR2IF = 0; //清中断标志位
+  03D9    1085    CLRB	0x5,1
+27:               
+28:               		app_timer();
+  03DA    23A7    CALL	0x3A7
+29:               	}
+30:               
+31:               	if (RACIF) //外部中断
+  03DB    1703    SETB	0x3,6
+  03DC    1C87    SNZB	0x7,1
+  03DD    2BE2    JP	0x3E2
+32:               	{
+33:               		PORTA; //读取PORTA状态
+  03DE    1303    CLRB	0x3,6
+  03DF    0805    LD	A,0x5
+34:               		RACIF = 0; //清中断标志
+  03E0    1703    SETB	0x3,6
+  03E1    1087    CLRB	0x7,1
+  03E2    0873    LD	A,0x73
+  03E3    008A    LD	0xA,A
+  03E4    0E72    SWAPA	0x72
+  03E5    0083    LD	0x3,A
+  03E6    0EFE    SWAPR	0x7E
+  03E7    0E7E    SWAPA	0x7E
+  03E8    0009    RETI
+35:               	}
+36:               }
+---- D:\project\K213A\program\app_timer.c ----------------------------------------------------------------------
+1:                #include "app_timer.h"
+2:                #include "gpio_board.h"
+3:                #include "display_define.h"
+4:                #include "key_board.h"
+5:                #include "simulate_uart.h"
+6:                
+7:                // timer_flag_type app_timer_flag= 0;// = {0, 0, 0, 0, 0, 0, 0, 0};
+8:                bit app_timer_flag_200us;
+9:                bit app_timer_flag_2ms;
+10:               bit app_timer_flag_10ms;
+11:               bit app_timer_flag_100ms;
+12:               
+13:               void app_timer(void)
+14:               {
+15:                   static uint8_t count_2ms = 0, count_10ms = 0, count_100ms = 0;
+16:               
+17:                   // 200us int
+18:                   app_timer_flag_200us = 1;
+19:                   // TEST_TOGGLE_PIN();
+20:                   // $ PA.6 TOGGLE;
+21:               
+22:                   // simulate_uart_send();
+23:                   key_input_check_timer();
+  03A7    223E    CALL	0x23E
+  03A8    300A    LDIA	0xA
+24:                   
+25:                   count_2ms++;
+  03A9    0AB2    INCR	0x32
+26:                   if (count_2ms >= 10)
+  03AA    0232    SUBA	0x32
+  03AB    1C03    SNZB	0x3,0
+  03AC    0008    RET
+27:                   {
+28:                       count_2ms = 0;
+  03AD    01B2    CLR	0x32
+29:                       app_timer_flag_2ms = 1;
+  03AE    1571    SETB	0x71,2
+30:                       
+31:                       Led_Scan();
+  03AF    236E    CALL	0x36E
+  03B0    3005    LDIA	0x5
+32:               
+33:                       count_10ms++;
+  03B1    0AB1    INCR	0x31
+34:                       if (count_10ms >= 5)
+  03B2    0231    SUBA	0x31
+  03B3    1C03    SNZB	0x3,0
+  03B4    0008    RET
+  03B5    300A    LDIA	0xA
+35:                       {
+36:                           count_10ms = 0;
+  03B6    01B1    CLR	0x31
+37:                           app_timer_flag_10ms = 1;
+  03B7    15F1    SETB	0x71,3
+38:               
+39:                           count_100ms++;
+  03B8    0AB0    INCR	0x30
+40:                           if(count_100ms>=10)
+  03B9    0230    SUBA	0x30
+  03BA    1C03    SNZB	0x3,0
+  03BB    0008    RET
+41:                           {
+42:                               count_100ms = 0;
+  03BC    01B0    CLR	0x30
+43:                               app_timer_flag_100ms = 1;
+  03BD    14F1    SETB	0x71,1
+  03BE    0008    RET
+44:                           }
+45:                       }
+46:                   }
+47:               }
+---- D:\project\K213A\program\key_board.c ----------------------------------------------------------------------
+1:                #include "key_board.h"
+2:                #include "gpio_board.h"
+3:                
+4:                uint8_t key_input_res = 0;
+5:                
+6:                #define KEY_PREVENT_SHAKE_TIME 50 //按键消抖时间10ms
+7:                void key_input_check_timer(void) //定期运行输入检查
+8:                {
+9:                    static uint8_t i = 0;
+10:                   static uint16_t k = 0, l = 0;
+11:                   
+12:                   if (POWER_KEY_PIN()) //弹起
+  023E    1303    CLRB	0x3,6
+  023F    1C85    SNZB	0x5,1
+  0240    2A44    JP	0x244
+13:                   {
+14:                       i = 0;
+  0241    01B6    CLR	0x36
+15:                       key_input_res &= ~bit0;
+  0242    1037    CLRB	0x37,0
+16:                   }
+  0243    2A4C    JP	0x24C
+  0244    3032    LDIA	0x32
+17:                   else //按下
+18:                   {
+19:                       i++;
+  0245    0AB6    INCR	0x36
+20:                       if (i >= KEY_PREVENT_SHAKE_TIME)
+  0246    0236    SUBA	0x36
+  0247    1C03    SNZB	0x3,0
+  0248    2A4C    JP	0x24C
+21:                       {
+22:                           i = KEY_PREVENT_SHAKE_TIME;
+  0249    3032    LDIA	0x32
+  024A    00B6    LD	0x36,A
+23:                           key_input_res |= bit0;
+  024B    1437    SETB	0x37,0
+24:                       }
+25:                   }
+26:               
+27:                   if (IC4056_STDBY_PIN()) // usb插入
+  024C    1E85    SNZB	0x5,5
+  024D    2A5E    JP	0x25E
+28:                   {
+29:                       k++;
+  024E    0AA6    INCR	0x26
+  024F    1903    SZB	0x3,2
+  0250    0AA7    INCR	0x27
+30:                       if (k >= 2000) //400ms
+  0251    3007    LDIA	0x7
+  0252    0227    SUBA	0x27
+  0253    30D0    LDIA	0xD0
+  0254    1903    SZB	0x3,2
+  0255    0226    SUBA	0x26
+  0256    1C03    SNZB	0x3,0
+  0257    2A6A    JP	0x26A
+31:                       {
+32:                           k = 2000;
+  0258    30D0    LDIA	0xD0
+  0259    00A6    LD	0x26,A
+  025A    3007    LDIA	0x7
+  025B    00A7    LD	0x27,A
+33:                           key_input_res |= bit2;
+  025C    1537    SETB	0x37,2
+  025D    2A6A    JP	0x26A
+34:                       }
+35:                   }
+36:                   else // usb拔掉
+37:                   {
+38:                       if (k > 0)
+  025E    0826    LD	A,0x26
+  025F    0427    ORA	0x27
+  0260    1903    SZB	0x3,2
+  0261    2A69    JP	0x269
+39:                       {
+40:                           k--;
+  0262    3001    LDIA	0x1
+  0263    02A6    SUBR	0x26
+  0264    3000    LDIA	0x0
+  0265    1C03    SNZB	0x3,0
+  0266    03A7    DECR	0x27
+  0267    02A7    SUBR	0x27
+41:                           // if (k > 500)
+42:                           //     k = 500;
+43:                       }
+  0268    2A6A    JP	0x26A
+44:                       else
+45:                       {
+46:                           key_input_res &= ~bit2;
+  0269    1137    CLRB	0x37,2
+47:                       }
+48:                   }
+49:               
+50:                   /********
+51:                       4054/4056充电指示: MCU IO均设为输入上拉
+52:                       断开充电器: CHRG=1, STD=1;
+53:                       充电中: CHRG=0, STD=1;
+54:                       充满状态:CHRG=1, STD=0;
+55:                       改变PROG引脚电阻可改变充电电流
+56:                    * **********/
+57:                   if(IC4056_CHRG_PIN())
+  026A    1F05    SNZB	0x5,6
+  026B    2A7C    JP	0x27C
+58:                   {
+59:                       l++;
+  026C    0AA4    INCR	0x24
+  026D    1903    SZB	0x3,2
+  026E    0AA5    INCR	0x25
+60:                       if (l >= 1000) //200ms
+  026F    3003    LDIA	0x3
+  0270    0225    SUBA	0x25
+  0271    30E8    LDIA	0xE8
+  0272    1903    SZB	0x3,2
+  0273    0224    SUBA	0x24
+  0274    1C03    SNZB	0x3,0
+  0275    0008    RET
+61:                       {
+62:                           l = 1000;
+  0276    30E8    LDIA	0xE8
+  0277    00A4    LD	0x24,A
+  0278    3003    LDIA	0x3
+  0279    00A5    LD	0x25,A
+63:                           key_input_res |= bit3;
+  027A    15B7    SETB	0x37,3
+  027B    0008    RET
+64:                       }
+65:                   }
+66:                   else
+67:                   {
+68:                       if (l > 0)
+  027C    0824    LD	A,0x24
+  027D    0425    ORA	0x25
+  027E    1903    SZB	0x3,2
+  027F    2A87    JP	0x287
+69:                           l--;
+  0280    3001    LDIA	0x1
+  0281    02A4    SUBR	0x24
+  0282    3000    LDIA	0x0
+  0283    1C03    SNZB	0x3,0
+  0284    03A5    DECR	0x25
+  0285    02A5    SUBR	0x25
+  0286    0008    RET
+70:                       else
+71:                           key_input_res &= ~bit3;
+  0287    11B7    CLRB	0x37,3
+  0288    0008    RET
+72:                   }
+73:               }
+---- stringtab ------------------------------------------------------------------
+---- reset_enter ------------------------------------------------------------------
+  0000    280A    JP	0xA
+  000A    280B    JP	0xB
+---- start_initialization ------------------------------------------------------------------
+  000B    3020    LDIA	0x20
+  000C    00BA    LD	0x3A,A
+  000D    304E    LDIA	0x4E
+  000E    00BB    LD	0x3B,A
+  000F    30E8    LDIA	0xE8
+  0010    00BC    LD	0x3C,A
+  0011    3003    LDIA	0x3
+  0012    00BD    LD	0x3D,A
+  0013    30E8    LDIA	0xE8
+  0014    00BE    LD	0x3E,A
+  0015    3003    LDIA	0x3
+  0016    00BF    LD	0x3F,A
+  0017    30FF    LDIA	0xFF
+  0018    00C0    LD	0x40,A
+  0019    3007    LDIA	0x7
+  001A    00C1    LD	0x41,A
+  001B    30FF    LDIA	0xFF
+  001C    00C2    LD	0x42,A
+  001D    3004    LDIA	0x4
+  001E    00FB    LD	0x7B,A
+  001F    3020    LDIA	0x20
+  0020    1383    CLRB	0x3,7
+  0021    0084    LD	0x4,A
+  0022    303A    LDIA	0x3A
+  0023    2454    CALL	0x454
+  0024    01FA    CLR	0x7A
+  0025    01F0    CLR	0x70
+  0026    01F1    CLR	0x71
+---- interrupt_function_enter ----------------------------------------------------------
+  0004    00FE    LD	0x7E,A
+  0005    0E03    SWAPA	0x3
+  0006    00F2    LD	0x72,A
+  0007    080A    LD	A,0xA
+  0008    00F3    LD	0x73,A
+  0009    2BD5    JP	0x3D5
+---- common_function ------------------------------------------------------------------
+  0027    0183    CLR	0x3
+  0028    2A89    JP	0x289
+  00D5    0840    LD	A,0x40
+  00D6    3E20    ADDIA	0x20
+  00D7    00BE    LD	0x3E,A
+  00D8    0841    LD	A,0x41
+  00D9    1803    SZB	0x3,0
+  00DA    3E01    ADDIA	0x1
+  00DB    00BF    LD	0x3F,A
+  00DC    3000    LDIA	0x0
+  00DD    0241    SUBA	0x41
+  00DE    3020    LDIA	0x20
+  00DF    1903    SZB	0x3,2
+  00E0    0240    SUBA	0x40
+  00E1    1C03    SNZB	0x3,0
+  00E2    28EC    JP	0xEC
+  00E3    0840    LD	A,0x40
+  00E4    3EE0    ADDIA	0xE0
+  00E5    00BC    LD	0x3C,A
+  00E6    0841    LD	A,0x41
+  00E7    1803    SZB	0x3,0
+  00E8    3E01    ADDIA	0x1
+  00E9    3EFF    ADDIA	0xFF
+  00EA    00BD    LD	0x3D,A
+  00EB    0008    RET
+  00EC    01BC    CLR	0x3C
+  00ED    01BD    CLR	0x3D
+  00EE    0008    RET
+  00EF    0241    SUBA	0x41
+  00F0    30BF    LDIA	0xBF
+  00F1    1903    SZB	0x3,2
+  00F2    0240    SUBA	0x40
+  00F3    3405    RET	0x5
+  016E    0876    LD	A,0x76
+  016F    0522    ANDA	0x22
+  0170    00F4    LD	0x74,A
+  0171    0877    LD	A,0x77
+  0172    0523    ANDA	0x23
+  0173    00F5    LD	0x75,A
+  0174    0474    ORA	0x74
+  0175    0008    RET
+  03D1    1534    SETB	0x34,2
+  03D2    14B4    SETB	0x34,1
+  03D3    1434    SETB	0x34,0
+  03D4    0008    RET
+  0454    0064    CLRWDT
+  0455    0180    CLR	0x0
+  0456    0A84    INCR	0x4
+  0457    0604    XORA	0x4
+  0458    1903    SZB	0x3,2
+  0459    3400    RET	0x0
+  045A    0604    XORA	0x4
+  045B    2C55    JP	0x455

@@ -1,0 +1,9 @@
+/output
+/.vscode
+/*.uvopt
+*.uvproj
+/debug
+/Project/MDK_Project
+*.code-workspace
+*.hrccproj
+/source insight
