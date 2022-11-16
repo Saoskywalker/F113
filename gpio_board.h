@@ -20,7 +20,7 @@
 
 #define LED1W_PIN(x) RA0 = x
 #define LED1R_PIN(x) RA2 = x
-#define EN_5V_PIN(x) RA0 = x
+#define EN_5V_PIN(x) RA3 = x
 #define LED2W_PIN(x) RB2 = x
 #define LED2R_PIN(x) RB3 = x
 #define LIGHT_PIN(x) RB4 = x

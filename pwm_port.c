@@ -12,7 +12,7 @@ uint8_t MM_pwm1_init(void)
 	PWMCON1 = 0B01000000; //PWM IO配置在B组, 关闭死区, 即关闭互补输出
 	PWMCON2 = 0B00000000; //关闭PWM反向输出
 
-    MM_pwm1_set(140, 0); //周期: 114K
+    MM_pwm1_set(145, 0); //周期: 110K
 	
     MM_pwm1_start(); //开启PWM1
 
@@ -60,11 +60,19 @@ void MM_pwm1_set(uint16_t Period, uint16_t Duty)
 
     if (Duty != 0XFFFF)
     {
-        i = PWMD01H;
-        i &= ~0X30;
-        i |= (Duty & 0X0300) >> 4;
-        PWMD01H = i; //PWM1[5:4]和PWM0[1:0] 占空比高2
-        PWMD1L = (uint8_t)Duty; //PWM1占空比低8
+        if (Duty == 0)
+        {
+            PWM1EN = 0; //关闭PWM0
+            ULTRASOUND_PWM(0);
+        }
+        else
+        {
+            i = PWMD01H;
+            i &= ~0X30;
+            i |= (Duty & 0X0300) >> 4;
+            PWMD01H = i;            // PWM1[5:4]和PWM0[1:0] 占空比高2
+            PWMD1L = (uint8_t)Duty; // PWM1占空比低8
+        }
     }
 }
 
@@ -77,10 +85,18 @@ void MM_pwm1_set_duty(uint16_t Duty)
 
     if (Duty != 0XFFFF)
     {
-        i = PWMD01H;
-        i &= ~0X30;
-        i |= (Duty & 0X0300) >> 4;
-        PWMD01H = i;
-        PWMD1L = (uint8_t)Duty;
+        if (Duty == 0)
+        {
+            PWM1EN = 0; //关闭PWM0
+            ULTRASOUND_PWM(0);
+        }
+        else
+        {
+            i = PWMD01H;
+            i &= ~0X30;
+            i |= (Duty & 0X0300) >> 4;
+            PWMD01H = i;
+            PWMD1L = (uint8_t)Duty;
+        }
     }
 }

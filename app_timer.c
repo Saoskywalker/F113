@@ -17,7 +17,6 @@ void app_timer(void)
     // 200us int
     app_timer_flag_200us = 1;
     // TEST_TOGGLE_PIN();
-    // $ PA.6 TOGGLE;
 
     // simulate_uart_send();
     key_input_check_timer();

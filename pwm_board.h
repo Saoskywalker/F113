@@ -4,10 +4,10 @@
 #include "pwm_port.h"
 
 #define PWM_DUTY_0 0
-#define PWM_DUTY_25 35
-#define PWM_DUTY_40 56
-#define PWM_DUTY_50 70
-#define PWM_DUTY_75 105
+#define PWM_DUTY_30 44
+#define PWM_DUTY_40 58
+#define PWM_DUTY_50 73
+#define PWM_DUTY_75 109
 
 #define PWM_INIT() MM_pwm1_init()
 #define PWM_START() MM_pwm1_start()

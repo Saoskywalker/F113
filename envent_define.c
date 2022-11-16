@@ -38,6 +38,8 @@ void event_produce(void)
         power_key_long_count = 0;
     }
 
+    //PCB生产检测进入
+
     key_old = key;
 }
 

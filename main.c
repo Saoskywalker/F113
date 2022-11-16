@@ -32,11 +32,11 @@ uint8_t app_battery_level = BATTERY_FULL;
 /*****************************
  * 电机控制输出
  * ********************************/
-static void motor_function(void)
+static void ultrasound_function(void)
 {
 	if (app_flag_work)
 	{
-		PWM_ULTRASOUND_SET_DUTY(PWM_DUTY_50);
+		PWM_ULTRASOUND_SET_DUTY(PWM_DUTY_30);
 	}
 	else
 	{
@@ -181,7 +181,11 @@ static void sleep(void)
 
 		while (app_flag_sleep)
 		{
+			MTF_watch_dog_exit();
+			MTF_timer_suspend();
 			MTF_sys_stop(); //进入休眠模式
+			MTF_timer_start();
+			MTF_watch_dog_init();
 			check_count = 0;
 			while (check_count < 300)
 			{
@@ -194,8 +198,13 @@ static void sleep(void)
 					event_handle();
 					check_count++;
 				}
+				app_timer_flag_200us = 0;
+				app_timer_flag_2ms = 0;
+				app_timer_flag_100ms = 0;
 				if (app_flag_sleep == 0)
+				{
 					break;
+				}
 			}
 		}
 		
@@ -234,13 +243,53 @@ static void app_init(void)
 	app_timer_flag_100ms = 0;
 }
 
+#if 0
+void gpio_test(void)
+{
+	static uint8_t ii = 0;
+	
+	if (POWER_KEY_PIN() == 0)
+	{
+		if (ii)
+		{
+			ii = 0;
+			// LED_1_PIN_OFF;
+		}
+		else
+		{
+			ii = 1;
+			// LED_1_PIN_ON;
+		}
+		// $ PA.6 TOGGLE;
+	}
+	else
+	{
+		// LED_1_PIN_OFF;
+
+			MTF_watch_dog_exit();
+			MTF_timer_suspend();
+			MM_adc1_suspend();
+			PWM_SUSPEND();
+			main_IO_exit();
+
+			MTF_sys_stop(); //进入掉电模式, 只能通过IO变化唤醒, 所有振荡器关闭, LVR无效
+
+            main_IO_init();
+            PWM_START();
+			MM_adc1_start();
+			MTF_timer_start();
+			MTF_watch_dog_init();
+	}
+}
+#endif
+
 #include "simulate_uart.h"
 void main(void)
 {	
     uint8_t sys_read_delay = 0, sleep_updata_delay = 0; 
 	
-	uint16_t tempADC = 0;
-	uint8_t ccc = 0, itoc = 0;
+	// uint16_t tempADC = 0;
+	// uint8_t ccc = 0, itoc = 0;
 	
 	main_IO_init();
 	PWM_INIT();
@@ -272,8 +321,9 @@ void main(void)
 			{
 				event_produce();
 				event_handle();
-				motor_function();
+				ultrasound_function();
 				Led_display();
+				// pcb_produce_test();
 			}
 		}
 
@@ -374,15 +424,17 @@ void main(void)
 
         //外设和程序测试
 #if 0
-        $ PB.4 TOGGLE;
-        .delay 8000;
+        // $ PB.4 TOGGLE;
+        // .delay 8000;
         gpio_test();
         
         //电池AD = 1.2*4096/VDD
-        if (ADC_BATTERY_VALUE() >= 1328 - 10 && ADC_BATTERY_VALUE() <= 1328 + 10)
-            PWM_MOTOR_START();
+        if (ADC_BATTERY_VALUE() >= 3166 - 50 && ADC_BATTERY_VALUE() <= 3166 + 50)
+            PWM_ULTRASOUND_SET_DUTY(0);
         else
-            PWM_MOTOR_SUSPEND();
+		// if(++ppp>=42)
+		// 	ppp = 0;
+        PWM_ULTRASOUND_SET_DUTY(44);
 #endif
     }
 }
