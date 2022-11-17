@@ -87,30 +87,40 @@ uint8_t LED_data[LED_DATA_SIZE] = {0}; //数码管显示输出缓存
 uint8_t LED_data_buf[LED_DATA_SIZE] = {0}; //LED显示data
 void Led_Scan(void)
 {
-  if (dis_start == 0)
-    return;
+  static uint8_t cnt = 0;
 
-  if (LED_data[0])
+  if (dis_start == 0)
+  {
+    cnt = 0;
+    return;
+  }
+
+  if (++cnt >= 100)
+  {
+    cnt = 0;
+  }
+
+  if (cnt < LED_data[0])
     LIGHT_PIN_ON;
   else
     LIGHT_PIN_OFF;
 
-  if (LED_data[1])
+  if (cnt < LED_data[1])
     LED1R_PIN_ON;
   else
     LED1R_PIN_OFF;
 
-  if (LED_data[2])
+  if (cnt < LED_data[2])
     LED1W_PIN_ON;
   else
     LED1W_PIN_OFF;
 
-  if (LED_data[3])
+  if (cnt < LED_data[3])
     LED2R_PIN_ON;
   else
     LED2R_PIN_OFF;
 
-  if (LED_data[4])
+  if (cnt < LED_data[4])
     LED2W_PIN_ON;
   else
     LED2W_PIN_OFF;

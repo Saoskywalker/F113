@@ -37,7 +37,7 @@ static void LedDsp_content(void)
 {
   static uint8_t _dis_charge_500ms = 0, _dis_charge_cnt = 0;
   static uint8_t _flash_cnt = 0, _delay_sleep_cnt = 0;
-  static uint8_t _gradual_cnt = 0;
+  static uint8_t _gradual_cnt = 0, _gradual_2_cnt = 0;
 
   if(app_flag_sys_ready==0)
   {
@@ -60,17 +60,20 @@ static void LedDsp_content(void)
     {
       if (app_flag_charge_full==0)
       {
-        if (++_gradual_cnt >= 100) //1s
+        if (++_gradual_cnt >= 200) //2s
         {
+          _gradual_2_cnt = 0;
           _gradual_cnt = 0;
         }
-        if (_gradual_cnt>=50) //500ms
+        if (_gradual_cnt >= 100) // 1s
         {
-          dis_white_brightness_set(0);
+          _gradual_2_cnt -= 1;
+          dis_white_brightness_set(_gradual_2_cnt);
         }
-        else        
+        else
         {
-          dis_white_brightness_set(100);
+          _gradual_2_cnt += 1;
+          dis_white_brightness_set(_gradual_2_cnt);
         }
       }
       else
@@ -91,18 +94,21 @@ static void LedDsp_content(void)
     //放电显示
     if (app_battery_level <= BATTERY_LOSE)
     {
-      if (++_gradual_cnt >= 100) // 1s
+      if (++_gradual_cnt >= 200) // 2s
       {
+        _gradual_2_cnt = 0;
         _gradual_cnt = 0;
         _flash_cnt++;
       }
-      if (_gradual_cnt >= 50) // 500ms
+      if (_gradual_cnt >= 100) // 1s
       {
-        dis_red_brightness_set(0);
+        _gradual_2_cnt -= 1;
+        dis_red_brightness_set(_gradual_2_cnt);
       }
       else
       {
-        dis_red_brightness_set(100);
+        _gradual_2_cnt += 1;
+        dis_red_brightness_set(_gradual_2_cnt);
       }
     }
     else

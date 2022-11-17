@@ -20,6 +20,7 @@ void app_timer(void)
 
     // simulate_uart_send();
     key_input_check_timer();
+    Led_Scan();
     
     count_2ms++;
     if (count_2ms >= 10)
@@ -27,8 +28,6 @@ void app_timer(void)
         count_2ms = 0;
         app_timer_flag_2ms = 1;
         
-        Led_Scan();
-
         count_10ms++;
         if (count_10ms >= 5)
         {
