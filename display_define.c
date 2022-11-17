@@ -1,26 +1,29 @@
 #include "display_define.h"
 #include "app_global.h"
 
-/***********************************************
- * 显示放电剩余电量
-*************************************************/
-static void dis_residue_battery(void)
+static void dis_white_brightness_set(uint8_t brightness)
 {
-  //显示放电剩余电量
-  if (app_battery_level <= BATTERY_LV1)
+  if (app_work_mode == MODE_A)
   {
-    led1_locate;
+    LED1W_GRADUAL(brightness);
   }
-  else if (app_battery_level <= BATTERY_LV2)
+  else
   {
-    led2_locate;
-    led1_locate;
+    LED1W_GRADUAL(brightness);
+    LED2W_GRADUAL(brightness);
   }
-  else if (app_battery_level <= BATTERY_FULL)
+}
+
+static void dis_red_brightness_set(uint8_t brightness)
+{
+  if (app_work_mode == MODE_A)
   {
-    led3_locate;
-    led2_locate;
-    led1_locate;
+    LED1R_GRADUAL(brightness);
+  }
+  else
+  {
+    LED1R_GRADUAL(brightness);
+    LED2R_GRADUAL(brightness);
   }
 }
 
@@ -33,7 +36,8 @@ static void dis_residue_battery(void)
 static void LedDsp_content(void)
 {
   static uint8_t _dis_charge_500ms = 0, _dis_charge_cnt = 0;
-  static uint8_t _dis_500ms_cnt = 0, _dis_500ms = 0, _flash_cnt = 0, _dis_2s_cnt = 0;
+  static uint8_t _flash_cnt = 0, _delay_sleep_cnt = 0;
+  static uint8_t _gradual_cnt = 0;
 
   if(app_flag_sys_ready==0)
   {
@@ -43,112 +47,85 @@ static void LedDsp_content(void)
 
   Led_Clear_All(); //清除所有显示数据
 
+  if (app_flag_light_state)
+  {
+    SCREEN_GRADUAL(100);
+  }
+
   if (app_flag_usb_insert) //整体策略上禁止充电时睡眠
   {
-    if (app_flag_charge_full)
+    _flash_cnt = 0;
+    //充电显示
+    if (app_flag_work)
     {
-      led3_locate;
-      led2_locate;
-      led1_locate;
+      if (app_flag_charge_full==0)
+      {
+        if (++_gradual_cnt >= 100) //1s
+        {
+          _gradual_cnt = 0;
+        }
+        if (_gradual_cnt>=50) //500ms
+        {
+          dis_white_brightness_set(0);
+        }
+        else        
+        {
+          dis_white_brightness_set(100);
+        }
+      }
+      else
+      {
+        dis_white_brightness_set(100);
+      }
     }
     else
     {
-      //显示充电电量
-      _dis_charge_500ms++;
-      if (_dis_charge_500ms >= 50)
+      if (app_flag_charge_full==0)
       {
-        _dis_charge_500ms = 0;
-
-        _dis_charge_cnt++;
-        if (_dis_charge_cnt >= 4)
-        {
-          if (app_battery_level <= BATTERY_LV1)
-          {
-            _dis_charge_cnt = 0;
-          }
-          else if (app_battery_level <= BATTERY_LV2)
-          {
-            _dis_charge_cnt = 1;
-          }
-          else if (app_battery_level <= BATTERY_FULL)
-          {
-            _dis_charge_cnt = 2;
-          }
-        }
-      }
-      if (_dis_charge_cnt == 1)
-      {
-        led1_locate;
-      }
-      else if (_dis_charge_cnt == 2)
-      {
-        led2_locate;
-        led1_locate;
-      }
-      else if (_dis_charge_cnt == 3)
-      {
-        led3_locate;
-        led2_locate;
-        led1_locate;
+        LED1R_GRADUAL(100);
       }
     }
   }
   else
   {
-    _dis_charge_cnt = 0;
-    _dis_charge_500ms = 0;
-
-    if (app_battery_level <= BATTERY_LV0 || app_flag_work == 0)
+    //放电显示
+    if (app_battery_level <= BATTERY_LOSE)
     {
-      _dis_500ms_cnt++;
-      if (_dis_500ms_cnt >= 50)
+      if (++_gradual_cnt >= 100) // 1s
       {
-        _dis_500ms_cnt = 0;
-
-        if (app_battery_level <= BATTERY_LOSE)
-          _flash_cnt++;
-        else
-          _flash_cnt = 0;
-
-        if (app_battery_level <= BATTERY_LV0)
-          _dis_500ms ^= 0X01;
-
-        if (app_flag_work == 0)
-          _dis_2s_cnt++;
-        else
-          _dis_2s_cnt = 0;
+        _gradual_cnt = 0;
+        _flash_cnt++;
+      }
+      if (_gradual_cnt >= 50) // 500ms
+      {
+        dis_red_brightness_set(0);
+      }
+      else
+      {
+        dis_red_brightness_set(100);
       }
     }
     else
     {
-      _dis_500ms_cnt = 0;
-      _flash_cnt = 0;
-      _dis_2s_cnt = 0;
-      _dis_500ms = 0;
+      if (app_flag_work)
+      {
+        dis_white_brightness_set(100);
+      }
     }
 
-    if (app_battery_level <= BATTERY_LV0)
-    {
-      if (_dis_500ms) //低电闪烁
-        Led_dis_All();
-    }
-    else
-    {
-      dis_residue_battery();
-    }
-
-    if (app_flag_work == 0)
+    if (app_flag_work == 0 && app_flag_light_state == 0)
     {
       if (app_battery_level <= BATTERY_LOSE)
       {
-        if (_flash_cnt >= 6) //低电睡眠策略, 闪3次后睡眠
+        if (_flash_cnt >= 3) //低电睡眠策略, 闪3次后睡眠
         {
           app_flag_disp_battery_level = 0;
         }
       }
       else
       {
-        if (_dis_2s_cnt >= 4) //正常睡眠策略, 延时2s
+        Led_Clear_All(); //避免特殊情况闪一下
+        if (++_delay_sleep_cnt >= 10) //正常睡眠策略, 延时100ms
         {
           app_flag_disp_battery_level = 0;
         }
@@ -158,10 +135,8 @@ static void LedDsp_content(void)
     if (!app_flag_disp_battery_level)
     {
       Led_Clear_All();
-      _dis_500ms_cnt = 0;
       _flash_cnt = 0;
-      _dis_2s_cnt = 0;
-      _dis_500ms = 0;
+      _delay_sleep_cnt = 0;
       app_flag_sleep = 1; //进入睡眠命令统一由此发出, 由sleep运行event_handle退出, 流程为, 先停止工作(但可显示), 再进睡眠
     }
   }

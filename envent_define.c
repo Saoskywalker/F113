@@ -15,32 +15,47 @@ void event_produce(void)
 
     key = key_get_result();
 
-    if ((key & bit0)) //单击电源键
-        sys_envent |= POWER_KEY;
-
     if ((key & bit2)) //插入充电线
         sys_envent |= USB_INSERT;
 
     if ((key & bit3)) //充满电
         sys_envent |= CHANGE_FULL;
 
-    if (key & bit0) //电源键长按
+    if (key & bit0)
     {
-        power_key_long_count++;
-        if (power_key_long_count >= 200) // 2s
+        if (power_key_long_count < 255)
         {
-            power_key_long_count = 0;
-            // sys_envent |= POWER_KEY;
+            power_key_long_count++;
+        }
+        if (power_key_long_count == 200) // 2s
+        {
+            // power_key_long_count = 0;
+            sys_envent |= LED_MODE_KEY; //电源键长按
         }
     }
     else
     {
+        if (power_key_long_count >= 5 && power_key_long_count <= 50)
+        {
+            sys_envent |= POWER_KEY; //单击电源键
+        }
+
         power_key_long_count = 0;
     }
 
     //PCB生产检测进入
+    // if ((key & bit0)) //电源键长按
+    // {
+    //     sys_envent |= PCB_CHECK;
+    // }
 
     key_old = key;
+}
+
+static void work_off(void)
+{
+    app_work_mode = MODE_A;
+    app_flag_work = 0;
 }
 
 //-----------------------------------------------------------
@@ -48,7 +63,6 @@ void event_produce(void)
 //-----------------------------------------------------------
 void event_handle(void)
 {
-    static uint16_t _30s_cnt = 0;
     uint16_t temp = 1;
 
     if (app_flag_sys_ready==0)
@@ -61,34 +75,37 @@ void event_handle(void)
     {   
         switch (temp) //注意事件顺序
         {
-        case MODE_KEY:
+        case LED_MODE_KEY:
             if (sys_envent & temp)
             {
-                if(app_flag_work)
-                {
-                    app_mode++;
-                    if (app_mode > MODE_D)
-                        app_mode = MODE_A;
-                }
+                app_flag_sleep = 0;
+                app_flag_disp_battery_level = 1;
+                app_flag_light_state = !app_flag_light_state;
             }
             break;
         case POWER_KEY:
             if (sys_envent & temp)
             {
-                if (app_flag_usb_insert == 0)
+                // if (app_flag_usb_insert == 0)
                 {
                     app_flag_sleep = 0;
                     app_flag_disp_battery_level = 1;
 
-                    if (app_battery_level > BATTERY_LOSE)
+                    if (app_flag_work)
                     {
-                        app_flag_work = 1;
+                        if (++app_work_mode > MODE_B)
+                        {
+                            work_off();
+                        }
+                    }
+                    else
+                    {
+                        if (app_battery_level > BATTERY_LOSE)
+                        {
+                            app_flag_work = 1;
+                        }
                     }
                 }
-            }
-            else
-            {
-                app_flag_work = 0;
             }
             break;
         case USB_INSERT:
@@ -97,7 +114,7 @@ void event_handle(void)
                 app_flag_sleep = 0;
                 app_flag_disp_battery_level = 1;
                 app_flag_usb_insert = 1;
-                app_flag_work = 0;
+                // work_off();
             }
             else
             {
@@ -132,27 +149,12 @@ void event_handle(void)
     }
     sys_envent = 0;
 
-    if (app_flag_work)
-    {
-        if (app_battery_level == BATTERY_LV0) //低电关机策略, 30s后关机
-        {
-            _30s_cnt++;
-            if (_30s_cnt >= 3000)
-            {
-                _30s_cnt = 0;
-                app_flag_work = 0;
-                app_battery_level = BATTERY_LOSE; //强制进入电池耗尽
-            }
-        }
-        else
-        {
-            _30s_cnt = 0;
-        }
-    }
-
     //error handle
     if (app_flag_current_error) //电流错误
-        app_flag_work = 0;
+        work_off();
     if (app_battery_level <= BATTERY_LOSE) //电池耗尽停止工作
-        app_flag_work = 0;
+    {
+        app_flag_light_state = 0;
+        work_off();
+    }
 }

@@ -29,7 +29,7 @@ extern bit app_flag_sys_ready; //系统准备完毕
 extern bit app_flag_work; //工作
 extern bit app_flag_error; //系统错误
 extern bit app_flag_sleep_updata; //用于标记在唤醒后一段时间内, 进行一定的唤醒处理
-extern bit app_flag_nc1;
+extern bit app_flag_light_state; //灯开关状态
 extern bit app_flag_usb_insert; //充电线插入
 extern bit app_flag_charge_full; //充满电
 extern bit app_flag_ntc_error; //ntc AD错误
@@ -92,7 +92,7 @@ extern bit app_flag_nc4;
 #define BATTERY_FULL 4
 #define BATTERY_HIGH 5
 
-extern uint8_t app_mode;
+extern uint8_t app_work_mode;
 extern uint8_t app_battery_level;
 
 #endif

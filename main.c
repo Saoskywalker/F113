@@ -15,7 +15,7 @@ bit app_flag_sys_ready; //系统准备完毕
 bit app_flag_work; //工作
 bit app_flag_error; //系统错误
 bit app_flag_sleep_updata; //用于标记在唤醒后一段时间内, 进行一定的唤醒处理
-bit app_flag_nc1;
+bit app_flag_light_state; //灯开关状态
 bit app_flag_usb_insert; //充电线插入
 bit app_flag_charge_full; //充满电
 bit app_flag_ntc_error; //ntc AD错误
@@ -26,7 +26,7 @@ bit app_flag_disp_battery_level; //显示电池电量
 bit app_flag_nc2;
 bit app_flag_nc3;
 bit app_flag_nc4;
-uint8_t app_mode = MODE_A;
+uint8_t app_work_mode = MODE_A;
 uint8_t app_battery_level = BATTERY_FULL;
 
 /*****************************
@@ -34,12 +34,61 @@ uint8_t app_battery_level = BATTERY_FULL;
  * ********************************/
 static void ultrasound_function(void)
 {
+	static uint16_t pulse_count = 0;
+	static uint8_t old_mode = MODE_A, run_time = 0;
+
 	if (app_flag_work)
 	{
-		PWM_ULTRASOUND_SET_DUTY(PWM_DUTY_30);
+		if (old_mode != app_work_mode)
+		{
+			old_mode = app_work_mode;
+			pulse_count = 0;
+			run_time = 0;
+		}
+		if (app_work_mode == MODE_A)
+		{
+			if (++pulse_count >= 30000) // 5min
+			{
+				pulse_count = 0;
+				if (++run_time >= 24) // 2h
+				{
+					app_flag_work = 0; //自动停止工作
+				}
+			}
+			if (pulse_count >= 300) // 3s
+			{
+				PWM_ULTRASOUND_SET_DUTY(PWM_DUTY_0);
+			}
+			else
+			{
+				PWM_ULTRASOUND_SET_DUTY(PWM_DUTY_30);
+			}
+		}
+		else
+		{
+			if (++pulse_count >= 18000) // 3min
+			{
+				pulse_count = 0;
+				if (++run_time >= 40) // 2h
+				{
+					app_flag_work = 0; //自动停止工作
+				}
+			}
+			if (pulse_count >= 300) // 3s
+			{
+				PWM_ULTRASOUND_SET_DUTY(PWM_DUTY_0);
+			}
+			else
+			{
+				PWM_ULTRASOUND_SET_DUTY(PWM_DUTY_30);
+			}
+		}
 	}
-	else
+
+	if (app_flag_work == 0)
 	{
+		pulse_count = 0;
+		run_time = 0;
 		PWM_ULTRASOUND_SET_DUTY(PWM_DUTY_0);
 	}
 }
@@ -53,26 +102,27 @@ static void battery_deal(void)
 	static uint16_t __temp1 = 1000, __temp2 = 1000;
 	static uint8_t __cnt = 0;
 
-	//电池AD = 1.2*4096/VDD
+	// Vref=2.4, 分压为1/2, Vin = 2*AD*2.4/4096+0.5(四舍五入), AD = (Vin)*4096/4.8+0.5(四舍五入)
+
 	if (app_flag_sys_ready == 0)// || app_flag_sleep_updata)
 	{
-		if (ADC_BATTERY_VALUE() <= 702) //7V voltage over high
+		if (ADC_BATTERY_VALUE() >= 4000) //voltage over high
 		{
 			app_battery_level = BATTERY_HIGH;
 		}
-		else if (ADC_BATTERY_VALUE() <= 1293) // 3.8V
+		else if (ADC_BATTERY_VALUE() >= 3328) // 3.9V
 		{
 			app_battery_level = BATTERY_FULL;
 		}
-		else if (ADC_BATTERY_VALUE() <= 1404) // 3.5V
+		else if (ADC_BATTERY_VALUE() >= 3157) // 3.7V
 		{
 			app_battery_level = BATTERY_LV2;
 		}
-		else if (ADC_BATTERY_VALUE() <= 1586) // 3.1V
+		else if (ADC_BATTERY_VALUE() >= 2987) // 3.5V
 		{
 			app_battery_level = BATTERY_LV1;
 		}
-		else if (ADC_BATTERY_VALUE() <= 1638) // 3.0V
+		else if (ADC_BATTERY_VALUE() >= 2645) // 3.1V
 		{
 			app_battery_level = BATTERY_LV0;
 		}
@@ -114,23 +164,23 @@ static void battery_deal(void)
 	if(app_flag_usb_insert)
 	{
 		//单向往上走
-		if (ADC_BATTERY_VALUE() <= 702) //7V voltage over high
+		if (ADC_BATTERY_VALUE() >= 4000) //voltage over high
 		{
 			app_battery_level = BATTERY_HIGH;
 		}
-		else if (ADC_BATTERY_VALUE() <= 1293) // 3.8V
+		else if (ADC_BATTERY_VALUE() >= 3328) // 3.9V
 		{
 			app_battery_level = BATTERY_FULL;
 		}
-		else if (ADC_BATTERY_VALUE() <= 1404 && app_battery_level <= BATTERY_LV2) // 3.5V
+		else if (ADC_BATTERY_VALUE() >= 3157 && app_battery_level <= BATTERY_LV2) // 3.7V
 		{
 			app_battery_level = BATTERY_LV2;
 		}
-		else if (ADC_BATTERY_VALUE() <= 1586 && app_battery_level <= BATTERY_LV1) // 3.1V
+		else if (ADC_BATTERY_VALUE() >= 2987 && app_battery_level <= BATTERY_LV1) // 3.5V
 		{
 			app_battery_level = BATTERY_LV1;
 		}
-		else if (ADC_BATTERY_VALUE() <= 1638 && app_battery_level <= BATTERY_LV0) // 3.0V
+		else //if (ADC_BATTERY_VALUE() >= 2645 && app_battery_level <= BATTERY_LV0) // 3.1V
 		{
 			app_battery_level = BATTERY_LV0;
 		}
@@ -138,27 +188,27 @@ static void battery_deal(void)
 	else
 	{
 		//单向往下走
-		if (ADC_BATTERY_VALUE() <= 702) //7V voltage over high
+		if (ADC_BATTERY_VALUE() >= 4000) //voltage over high
 		{
 			app_battery_level = BATTERY_HIGH;
 		}
-		else if (ADC_BATTERY_VALUE() <= 1293 && app_battery_level >= BATTERY_FULL) // 3.8V
+		else if (ADC_BATTERY_VALUE() >= 3328 && app_battery_level >= BATTERY_FULL) // 3.9V
 		{
 			app_battery_level = BATTERY_FULL;
 		}
-		else if (ADC_BATTERY_VALUE() <= 1404 && app_battery_level >= BATTERY_LV2) // 3.5V
+		else if (ADC_BATTERY_VALUE() >= 3157 && app_battery_level >= BATTERY_LV2) // 3.7V
 		{
 			app_battery_level = BATTERY_LV2;
 		}
-		else if (ADC_BATTERY_VALUE() <= 1586 && app_battery_level >= BATTERY_LV1) // 3.1V
+		else if (ADC_BATTERY_VALUE() >= 2987 && app_battery_level >= BATTERY_LV1) // 3.5V
 		{
 			app_battery_level = BATTERY_LV1;
 		}
-		else if (ADC_BATTERY_VALUE() <= 1638 && app_battery_level >= BATTERY_LV0) // 3.0V
+		else if (ADC_BATTERY_VALUE() >= 2645 && app_battery_level >= BATTERY_LV0) // 3.1V
 		{
 			app_battery_level = BATTERY_LV0;
 		}
-		else // 2.9V
+		else // 2.75V
 		{
 			app_battery_level = BATTERY_LOSE;
 		}
@@ -226,7 +276,7 @@ static void app_init(void)
 	app_flag_work = 0; //工作
 	app_flag_error = 0; //系统错误
 	app_flag_sleep_updata = 0; //用于标记在唤醒后一段时间内, 进行一定的唤醒处理
-	app_flag_nc1 = 0;
+	app_flag_light_state = 0; //灯开关状态
 	app_flag_usb_insert = 0; //充电线插入
 	app_flag_charge_full = 0; //充满电
 	app_flag_ntc_error = 0; //ntc AD错误

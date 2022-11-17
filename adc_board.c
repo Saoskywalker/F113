@@ -31,8 +31,8 @@ void adc_run(void)
         //为保证结果准确度, 切换通道后建议500ns后开采样
         if (channel_count == 0) // battery
         {
-            // MM_adc1_set_ref(MTF_ADC_VREF_2P4V);
-            // MM_adc1_set_channel(MTF_ADC_CH4);
+            MM_adc1_set_ref(MTF_ADC_VREF_2P4V);
+            MM_adc1_set_channel(MTF_ADC_CH4);
         }
         else // motor current
         {

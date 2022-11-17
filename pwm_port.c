@@ -72,6 +72,7 @@ void MM_pwm1_set(uint16_t Period, uint16_t Duty)
             i |= (Duty & 0X0300) >> 4;
             PWMD01H = i;            // PWM1[5:4]和PWM0[1:0] 占空比高2
             PWMD1L = (uint8_t)Duty; // PWM1占空比低8
+            PWM1EN = 1; //开启PWM0
         }
     }
 }
@@ -97,6 +98,7 @@ void MM_pwm1_set_duty(uint16_t Duty)
             i |= (Duty & 0X0300) >> 4;
             PWMD01H = i;
             PWMD1L = (uint8_t)Duty;
+            PWM1EN = 1; //开启PWM0
         }
     }
 }

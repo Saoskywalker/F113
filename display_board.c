@@ -37,7 +37,11 @@ void Led_Display_exit(void)
 ***************************************************/
 void Led_Dis_Update(void)
 {
-    LED_data = LED_data_buf;
+  uint8_t i = 0;
+  for (i = 0; i < sizeof(LED_data); i++)
+  {
+    LED_data[i] = LED_data_buf[i];
+  }
 }
 
 /*************************************************
@@ -48,7 +52,11 @@ void Led_Dis_Update(void)
 ***************************************************/
 void Led_Clear_All(void)
 {
-  LED_data_buf = 0;
+  uint8_t i;
+  for (i = 0; i < LED_DATA_SIZE; i++)
+  {
+    LED_data_buf[i] = 0;
+  }
 }
 
 /*************************************************
@@ -59,7 +67,11 @@ void Led_Clear_All(void)
 ***************************************************/
 void Led_dis_All(void)
 {
-    LED_data_buf = 0XFF;
+  uint8_t i;
+  for (i = 0; i < LED_DATA_SIZE; i++)
+  {
+    LED_data_buf[i] = 0XFF;
+  }
 }
 
 /*************************************************
@@ -68,35 +80,38 @@ void Led_dis_All(void)
  // 入口参数    : 无
  // 出口参数    : 无
 ***************************************************/
-uint8_t LED_data = 0; //数码管显示输出缓存
-uint8_t LED_data_buf = 0; //LED显示data
+// #define LED_SCAN_TOTAL 6 //通道数量
+// #define LED_SCAN_INTERVAL 1  //通道和显示更新间隔
+// #define LED_LIGHT_LEVEL 1 //亮度等级
+uint8_t LED_data[LED_DATA_SIZE] = {0}; //数码管显示输出缓存
+uint8_t LED_data_buf[LED_DATA_SIZE] = {0}; //LED显示data
 void Led_Scan(void)
 {
-  if (dis_start==0)
+  if (dis_start == 0)
     return;
-  
-  if (LED_data&0X01)
-    LED1W_PIN_ON;
-  else
-    LED1W_PIN_OFF;
 
-  if (LED_data&0X02)
+  if (LED_data[0])
+    LIGHT_PIN_ON;
+  else
+    LIGHT_PIN_OFF;
+
+  if (LED_data[1])
     LED1R_PIN_ON;
   else
     LED1R_PIN_OFF;
 
-  if (LED_data&0X04)
-    LED2W_PIN_ON;
+  if (LED_data[2])
+    LED1W_PIN_ON;
   else
-    LED2W_PIN_OFF;
+    LED1W_PIN_OFF;
 
-  if (LED_data&0X08)
+  if (LED_data[3])
     LED2R_PIN_ON;
   else
     LED2R_PIN_OFF;
 
-  if (LED_data&0X10)
-    LIGHT_PIN_ON;
+  if (LED_data[4])
+    LED2W_PIN_ON;
   else
-    LIGHT_PIN_OFF;
+    LED2W_PIN_OFF;
 }
