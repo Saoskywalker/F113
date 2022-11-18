@@ -30,7 +30,8 @@ uint8_t MM_pwm1_exit(void)
 
 void MM_pwm1_start(void)
 {
-    PWM1EN = 1; //开启PWM0
+    //取消, 避免开启时有输出
+    // PWM1EN = 1; //开启PWM0
 }
 
 void MM_pwm1_suspend(void)
