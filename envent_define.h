@@ -12,4 +12,6 @@
 void event_produce(void);
 void event_handle(void);
 
+void work_off(void);
+
 #endif

@@ -52,7 +52,7 @@ static void ultrasound_function(void)
 				pulse_count = 0;
 				if (++run_time >= 24) // 2h
 				{
-					app_flag_work = 0; //自动停止工作
+					work_off(); //自动停止工作
 				}
 			}
 			if (pulse_count >= 300) // 3s
@@ -71,7 +71,7 @@ static void ultrasound_function(void)
 				pulse_count = 0;
 				if (++run_time >= 40) // 2h
 				{
-					app_flag_work = 0; //自动停止工作
+					work_off(); //自动停止工作
 				}
 			}
 			if (pulse_count >= 300) // 3s
@@ -218,10 +218,9 @@ static void battery_deal(void)
 /*****************************
  * 睡眠处理
 ***************************/
+uint16_t wakeup_overtime_cnt = 0; //睡眠唤醒超时
 static void sleep(void)
 {
-	uint16_t check_count = 0;
-	
 	if(app_flag_sleep)
 	{
 		Led_Display_exit();
@@ -236,8 +235,8 @@ static void sleep(void)
 			MTF_sys_stop(); //进入休眠模式
 			MTF_timer_start();
 			MTF_watch_dog_init();
-			check_count = 0;
-			while (check_count < 300)
+			wakeup_overtime_cnt = 0;
+			while (wakeup_overtime_cnt < 150)
 			{
 				MTF_watch_dog_feed();
 				app_flag_sleep_updata = 1;
@@ -246,7 +245,7 @@ static void sleep(void)
 					app_timer_flag_10ms = 0;
 					event_produce();
 					event_handle();
-					check_count++;
+					wakeup_overtime_cnt++;
 				}
 				app_timer_flag_200us = 0;
 				app_timer_flag_2ms = 0;

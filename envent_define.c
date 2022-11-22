@@ -23,6 +23,7 @@ void event_produce(void)
 
     if (key & bit0)
     {
+        wakeup_overtime_cnt = 0;
         if (power_key_long_count < 255)
         {
             power_key_long_count++;
@@ -52,7 +53,7 @@ void event_produce(void)
     key_old = key;
 }
 
-static void work_off(void)
+void work_off(void)
 {
     app_work_mode = MODE_A;
     app_flag_work = 0;

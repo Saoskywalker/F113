@@ -94,5 +94,6 @@ extern bit app_flag_nc4;
 
 extern uint8_t app_work_mode;
 extern uint8_t app_battery_level;
+extern uint16_t wakeup_overtime_cnt; //睡眠唤醒超时
 
 #endif
